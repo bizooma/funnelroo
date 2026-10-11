@@ -48,7 +48,7 @@ export function FunnelResourceTab({ funnel, draft, onChanged }) {
       setResources(rRes.data?.resources || []);
       setSenders(sRes.data?.senders || []);
       setExternalProviderConfigured(sRes.data?.external_provider_configured || false);
-    } catch (e) {
+    } catch {
       toast({ title: "Could not load delivery config", variant: "destructive" });
     } finally {
       setLoading(false);

@@ -37,7 +37,7 @@ export default function ContactDetail() {
       }
       setData(res.data);
       setNotes(res.data?.contact?.notes || "");
-    } catch (e) {
+    } catch {
       toast({ title: "Could not load contact", variant: "destructive" });
     } finally {
       setLoading(false);
@@ -51,7 +51,7 @@ export default function ContactDetail() {
       await base44.functions.invoke("contactsAccess", { action: "updateNotes", contact_id: id, notes });
       toast({ title: "Notes saved" });
       await load();
-    } catch (e) {
+    } catch {
       toast({ title: "Save failed", variant: "destructive" });
     } finally {
       setSavingNotes(false);
@@ -65,7 +65,7 @@ export default function ContactDetail() {
       if (res.data?.error) toast({ title: "Retry failed", description: res.data.error, variant: "destructive" });
       else toast({ title: "Delivery retried" });
       await load();
-    } catch (e) {
+    } catch {
       toast({ title: "Retry failed", variant: "destructive" });
     } finally {
       setRetrying(null);

@@ -93,7 +93,7 @@ function BriefTab() {
       await base44.functions.invoke("workspaceAccess", { action: "updateWorkspace", workspace_id: current.id, mascot_image_url: file_url });
       await refresh();
       toast({ title: "Mascot uploaded" });
-    } catch (e) {
+    } catch {
       toast({ title: "Upload failed", variant: "destructive" });
     } finally {
       setUploading(false);
@@ -254,7 +254,7 @@ function TeamTab({ canAdmin }) {
     try {
       await base44.functions.invoke("workspaceAccess", { action: "removeMember", workspace_id: current.id, member_id: memberId });
       load();
-    } catch (e) {
+    } catch {
       toast({ title: "Failed", variant: "destructive" });
     }
   }

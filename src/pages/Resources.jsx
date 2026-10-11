@@ -28,7 +28,7 @@ export default function Resources() {
     try {
       const res = await base44.functions.invoke("resourceAccess", { action: "list", workspace_id: current.id });
       setResources(res.data?.resources || []);
-    } catch (e) {
+    } catch {
       toast({ title: "Could not load resources", variant: "destructive" });
     } finally {
       setLoading(false);
@@ -181,7 +181,7 @@ function ResourceCard({ resource, onChanged }) {
     try {
       await base44.functions.invoke("resourceAccess", { action: "update", resource_id: resource.id, archived: true });
       await onChanged();
-    } catch (e) {
+    } catch {
       toast({ title: "Failed", variant: "destructive" });
     } finally {
       setArchiving(false);

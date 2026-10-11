@@ -28,7 +28,7 @@ export default function Contacts() {
       ]);
       setContacts(cRes.data?.contacts || []);
       setFunnels(fRes.data?.funnels || []);
-    } catch (e) {
+    } catch {
       toast({ title: "Could not load contacts", variant: "destructive" });
     } finally {
       setLoading(false);

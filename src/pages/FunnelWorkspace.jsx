@@ -103,7 +103,7 @@ export default function FunnelWorkspace() {
       if (dirtyBlocks) await saveBlocks(dirtyBlocks);
       setDirty(false);
       setTab(pendingTab);
-    } catch (e) {
+    } catch {
       // saveBlocks already shows a toast
     } finally {
       setPendingTab(null);
@@ -156,7 +156,7 @@ export default function FunnelWorkspace() {
     try {
       await base44.functions.invoke("funnelAccess", { action: "update", funnel_id: id, [field]: value });
       setFunnel((f) => ({ ...f, [field]: value }));
-    } catch (e) {
+    } catch {
       toast({ title: "Failed", variant: "destructive" });
     }
   }
