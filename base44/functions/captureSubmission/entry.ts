@@ -152,7 +152,7 @@ export default async function (req) {
       // Funnel was republished since the client loaded the form → stale.
       // Clean up the unenriched claim (only if still unenriched).
       await sr.entities.Submission.updateMany(
-        { id: submission.id, payload_fingerprint: { $exists: false } },
+        { id: submission.id, payload_fingerprint: null },
         { $unset: { placeholder: "" } }
       );
       // Delete the unenriched placeholder so a fresh request_id can proceed after reload
@@ -168,7 +168,7 @@ export default async function (req) {
 
     // 10. atomically enrich the submission (only if not already enriched by a concurrent request)
     await sr.entities.Submission.updateMany(
-      { id: submission.id, payload_fingerprint: { $exists: false } },
+      { id: submission.id, payload_fingerprint: null },
       {
         $set: {
           workspace_id: funnel.workspace_id,
@@ -274,7 +274,7 @@ async function fulfill(sr, base44, funnel, submission, origin) {
   });
   // Set first_submission_id only on create (atomic conditional)
   await sr.entities.FunnelLead.updateMany(
-    { id: lead.id, first_submission_id: { $exists: false } },
+    { id: lead.id, first_submission_id: null },
     {
       $set: {
         first_submission_id: submission.id,

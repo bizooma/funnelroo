@@ -63,7 +63,7 @@ async function ensurePublicId(sr, funnel) {
   if (funnel.public_id) return funnel;
   const publicId = generatePublicId();
   await sr.entities.Funnel.updateMany(
-    { id: funnel.id, public_id: { $exists: false } },
+    { id: funnel.id, public_id: null },
     { $set: { public_id } }
   );
   const refreshed = firstRecord(await sr.entities.Funnel.filter({ id: funnel.id }));
