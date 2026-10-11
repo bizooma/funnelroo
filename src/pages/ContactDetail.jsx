@@ -12,7 +12,7 @@ import { ArrowLeft, Loader2, Mail, FileText, RotateCw, CheckCircle2, XCircle, Cl
 export default function ContactDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { current, canAdmin } = useWorkspace();
+  const { current, canAdmin, switchWorkspace, workspaces } = useWorkspace();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notes, setNotes] = useState("");
@@ -24,6 +24,17 @@ export default function ContactDetail() {
     setLoading(true);
     try {
       const res = await base44.functions.invoke("contactsAccess", { action: "get", contact_id: id });
+      const contactWs = res.data?.contact?.workspace_id;
+      // Workspace consistency: if the contact belongs to a different workspace,
+      // switch to it so the sidebar and context match. Never mix one contact
+      // with another workspace's context.
+      if (contactWs && current && contactWs !== current.id) {
+        const match = workspaces.find((w) => w.id === contactWs);
+        if (match) {
+          await switchWorkspace(match);
+          return; // switchWorkspace triggers context update; this load is stale
+        }
+      }
       setData(res.data);
       setNotes(res.data?.contact?.notes || "");
     } catch (e) {
@@ -32,7 +43,7 @@ export default function ContactDetail() {
       setLoading(false);
     }
   }
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { load(); }, [id, current?.id]);
 
   async function saveNotes() {
     setSavingNotes(true);

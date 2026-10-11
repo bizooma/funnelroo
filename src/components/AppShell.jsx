@@ -1,10 +1,10 @@
 import React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useWorkspace } from "@/lib/workspaceContext";
 import { useAuth } from "@/lib/AuthContext";
 import { MascotBadge } from "@/components/MascotBadge";
 import {
-  LayoutDashboard, FolderKanban, Users, Settings, BookOpen, Sparkles, ChevronDown, Package,
+  LayoutDashboard, FolderKanban, Users, Settings, Sparkles, ChevronDown, Package,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -17,10 +17,22 @@ const nav = [
 ];
 
 export default function AppShell({ children }) {
-  const { current, workspaces, switchWorkspace, profile } = useWorkspace();
+  const { current, workspaces, switchWorkspace } = useWorkspace();
   const navigate = useNavigate();
+  const location = useLocation();
   const { logout } = useAuth();
   const [wsOpen, setWsOpen] = useState(false);
+
+  // Switching workspaces from a detail page (e.g. /funnels/:id, /contacts/:id)
+  // would show the wrong workspace's brief/sidebar. Navigate to /app to avoid
+  // mixing one workspace's detail with another's context.
+  function handleSwitchWorkspace(w) {
+    switchWorkspace(w);
+    setWsOpen(false);
+    if (location.pathname.startsWith("/funnels/") || location.pathname.startsWith("/contacts/")) {
+      navigate("/app");
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#f7f8fa] flex">
@@ -51,7 +63,7 @@ export default function AppShell({ children }) {
               {workspaces.map((w) => (
                 <button
                   key={w.id}
-                  onClick={() => { switchWorkspace(w); setWsOpen(false); }}
+                  onClick={() => handleSwitchWorkspace(w)}
                   className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 ${w.id === current?.id ? "bg-indigo-50 text-indigo-700" : "text-slate-700"}`}
                 >
                   {w.name}

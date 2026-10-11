@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { MascotBadge } from "@/components/MascotBadge";
-import { Loader2, Download, ExternalLink, FileX, Clock, ShieldOff } from "lucide-react";
+import { Loader2, Download, FileX, Clock, ShieldOff } from "lucide-react";
 
 // Stable FunnelRoo resource-access route. Validates the grant server-side and
 // issues a fresh short-lived download URL (file) or redirects (external).

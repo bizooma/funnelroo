@@ -6,6 +6,7 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider } from '@/lib/AuthContext';
 import ScrollToTop from './components/ScrollToTop';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import WorkspaceGuard from '@/components/WorkspaceGuard';
 import { WorkspaceProvider } from '@/lib/workspaceContext';
 // Auth pages
 import Login from '@/pages/Login';
@@ -47,14 +48,16 @@ function App() {
             {/* Protected routes — require authentication */}
             <Route element={<ProtectedRoute unauthenticatedElement={<LoginRedirect />} />}>
               <Route element={<WorkspaceProvider><Outlet /></WorkspaceProvider>}>
-                <Route path="/app" element={<Dashboard />} />
-                <Route path="/funnels" element={<Funnels />} />
-                <Route path="/funnels/:id" element={<FunnelWorkspace />} />
-                <Route path="/settings" element={<Settings />} />
                 <Route path="/onboarding" element={<Onboarding />} />
-                <Route path="/contacts" element={<Contacts />} />
-                <Route path="/contacts/:id" element={<ContactDetail />} />
-                <Route path="/resources" element={<Resources />} />
+                <Route element={<WorkspaceGuard />}>
+                  <Route path="/app" element={<Dashboard />} />
+                  <Route path="/funnels" element={<Funnels />} />
+                  <Route path="/funnels/:id" element={<FunnelWorkspace />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/contacts" element={<Contacts />} />
+                  <Route path="/contacts/:id" element={<ContactDetail />} />
+                  <Route path="/resources" element={<Resources />} />
+                </Route>
               </Route>
             </Route>
 

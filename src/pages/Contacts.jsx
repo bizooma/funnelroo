@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/use-toast";
-import { Loader2, Search, ChevronRight } from "lucide-react";
+import { Search, ChevronRight } from "lucide-react";
 
 export default function Contacts() {
   const { current } = useWorkspace();

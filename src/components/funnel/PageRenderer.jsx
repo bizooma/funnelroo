@@ -1,12 +1,42 @@
 import React from "react";
 import { Image } from "@/components/ui/image";
-import { Calendar, FileText, PlayCircle, HelpCircle, Quote } from "lucide-react";
+import { Calendar, FileText, HelpCircle, Quote, Video } from "lucide-react";
 import { PublicForm } from "./PublicForm";
 
 // Shared section-based page renderer. Renders the same structured page_blocks
 // in the editor preview and on the anonymous public funnel page.
-// mode: "preview" (editor) | "public" (live). In public mode the form block is
-// display-only (capture arrives in a later phase).
+// mode: "preview" (editor) | "public" (live).
+
+// Parse a video URL into an embeddable iframe src. Supports YouTube and Vimeo.
+// Returns null for unsupported/empty URLs.
+function videoEmbedSrc(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, "");
+    // YouTube: youtube.com/watch?v=, youtu.be/
+    if (host === "youtube.com" || host === "m.youtube.com") {
+      const v = u.searchParams.get("v");
+      if (v) return `https://www.youtube.com/embed/${v}`;
+    }
+    if (host === "youtu.be") {
+      return `https://www.youtube.com/embed${u.pathname}`;
+    }
+    // Vimeo: vimeo.com/ID
+    if (host === "vimeo.com") {
+      const id = u.pathname.split("/").filter(Boolean)[0];
+      if (id) return `https://player.vimeo.com/video/${id}`;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function scrollToCtaTarget() {
+  const el = document.getElementById("funnel-form") || document.getElementById("funnel-booking");
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 
 function Block({ block, theme, mode, onSubmit, formState }) {
   const p = block.props || {};
@@ -21,6 +51,7 @@ function Block({ block, theme, mode, onSubmit, formState }) {
           {p.subheadline && <p className="mt-5 text-lg text-slate-600 leading-relaxed">{p.subheadline}</p>}
           {p.cta_label && (
             <button
+              onClick={scrollToCtaTarget}
               className="mt-8 px-7 py-3 rounded-lg text-white font-medium text-sm shadow-sm"
               style={{ background: primary }}
             >
@@ -94,20 +125,36 @@ function Block({ block, theme, mode, onSubmit, formState }) {
           </div>
         </section>
       );
-    case "video":
+    case "video": {
+      const embedSrc = videoEmbedSrc(p.url);
       return (
-        <section className="px-6 py-8 max-w-3xl mx-auto text-center">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-10">
-            <PlayCircle className="w-12 h-12 mx-auto text-slate-300" />
-            {p.title && <p className="mt-3 text-sm text-slate-500">{p.title}</p>}
-            {p.url && <p className="text-xs text-slate-400 mt-1">{p.url}</p>}
-          </div>
+        <section className="px-6 py-8 max-w-3xl mx-auto">
+          {embedSrc ? (
+            <div className="rounded-xl overflow-hidden aspect-video bg-black">
+              <iframe
+                src={embedSrc}
+                title={p.title || "Video"}
+                className="w-full h-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-10 text-center">
+              <Video className="w-10 h-10 mx-auto text-slate-300" />
+              {p.title && <p className="mt-3 text-sm text-slate-500">{p.title}</p>}
+              <p className="text-xs text-slate-400 mt-1">
+                {p.url ? "Unsupported video URL. Use a YouTube or Vimeo link." : "No video URL set. Add a YouTube or Vimeo link in the editor."}
+              </p>
+            </div>
+          )}
         </section>
       );
+    }
     case "form":
       if (mode === "public" && onSubmit) {
         return (
-          <section className="px-6 py-10 max-w-md mx-auto">
+          <section id="funnel-form" className="px-6 py-10 max-w-md mx-auto">
             <PublicForm
               heading={p.heading}
               fields={p.fields || []}
@@ -120,7 +167,7 @@ function Block({ block, theme, mode, onSubmit, formState }) {
         );
       }
       return (
-        <section className="px-6 py-10 max-w-md mx-auto">
+        <section id="funnel-form" className="px-6 py-10 max-w-md mx-auto">
           <div className="bg-white rounded-2xl border border-slate-200 p-7 shadow-sm">
             {p.heading && <h2 className="text-xl font-semibold text-slate-900 mb-4">{p.heading}</h2>}
             <div className="space-y-3">
@@ -158,7 +205,7 @@ function Block({ block, theme, mode, onSubmit, formState }) {
       );
     case "booking":
       return (
-        <section className="px-6 py-10 max-w-md mx-auto text-center">
+        <section id="funnel-booking" className="px-6 py-10 max-w-md mx-auto text-center">
           <div className="w-12 h-12 rounded-full mx-auto flex items-center justify-center mb-3" style={{ background: `${primary}15`, color: primary }}>
             <Calendar className="w-6 h-6" />
           </div>

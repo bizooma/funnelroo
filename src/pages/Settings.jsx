@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/use-toast";
 import {
-  Save, Loader2, Plus, Trash2, Upload, Users, FileText, CreditCard, Plug, Shield,
+  Save, Loader2, Plus, Trash2, Upload, Users, FileText, CreditCard, Plug, Shield, Copy, Check,
 } from "lucide-react";
 
 const TABS = [
@@ -24,7 +24,7 @@ const TABS = [
 ];
 
 export default function Settings() {
-  const { current, loading, isOwner, canAdmin } = useWorkspace();
+  const { current, loading, canAdmin } = useWorkspace();
   const [tab, setTab] = useState("brief");
 
   if (loading) return <AppShell><div className="p-8"><div className="w-8 h-8 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin" /></div></AppShell>;
@@ -47,7 +47,7 @@ export default function Settings() {
         </div>
 
         {tab === "brief" && <BriefTab />}
-        {tab === "team" && <TeamTab canAdmin={canAdmin} isOwner={isOwner} />}
+        {tab === "team" && <TeamTab canAdmin={canAdmin} />}
         {tab === "integrations" && <Card><CardContent><ComingSoon title="Integrations" description="Email provider, scheduler and other workspace-owned connections with verified sender mapping." phase="Follow-on Phase 2-3" /></CardContent></Card>}
         {tab === "billing" && <Card><CardContent><ComingSoon title="Billing" description="Stripe subscriptions — one per workspace — with owner-only controls and server-side entitlements." phase="Follow-on Phase 4" /></CardContent></Card>}
         {tab === "data" && <Card><CardContent><ComingSoon title="Data controls" description="Export and deletion handling, retention policy and audit records." phase="Follow-on Phase 3-4" /></CardContent></Card>}
@@ -201,13 +201,15 @@ function BriefTab() {
   );
 }
 
-function TeamTab({ canAdmin, isOwner }) {
+function TeamTab({ canAdmin }) {
   const { current } = useWorkspace();
   const [members, setMembers] = useState([]);
   const [invites, setInvites] = useState([]);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("member");
   const [sending, setSending] = useState(false);
+  const [lastInvite, setLastInvite] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   async function load() {
     const [m, i] = await Promise.all([
@@ -221,16 +223,30 @@ function TeamTab({ canAdmin, isOwner }) {
 
   async function invite() {
     setSending(true);
+    setLastInvite(null);
     try {
-      await base44.functions.invoke("workspaceAccess", { action: "invite", workspace_id: current.id, email, role });
+      const res = await base44.functions.invoke("workspaceAccess", { action: "invite", workspace_id: current.id, email, role });
+      const link = res.data?.invite_link || "";
+      setLastInvite({ email, link, email_sent: res.data?.email_sent, error: res.data?.email_error });
       setEmail("");
-      toast({ title: "Invite sent", description: `${email} can join this workspace.` });
+      if (res.data?.email_sent) {
+        toast({ title: "Invitation created", description: `Sent to ${lastInvite?.email || email}.` });
+      } else {
+        toast({ title: "Invitation created", description: "Email could not be sent automatically. Copy the link below to share it." });
+      }
       load();
     } catch (e) {
       toast({ title: "Invite failed", description: e.response?.data?.error || e.message, variant: "destructive" });
     } finally {
       setSending(false);
     }
+  }
+
+  function copyLink(link) {
+    navigator.clipboard.writeText(link).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   }
 
   async function remove(memberId) {
@@ -278,13 +294,38 @@ function TeamTab({ canAdmin, isOwner }) {
               </select>
               <Button disabled={!email || sending} onClick={invite}>{sending ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : null} {sending ? "Sending…" : "Send invite"}</Button>
             </div>
+            {lastInvite && (
+              <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50/50 p-3">
+                <div className="flex items-center gap-2 text-sm text-slate-700">
+                  <Check className="w-4 h-4 text-emerald-600" />
+                  <span className="font-medium">Invitation created</span>
+                  {lastInvite.email_sent
+                    ? <span className="text-slate-500">— sent to {lastInvite.email}</span>
+                    : <span className="text-amber-600">— email could not be sent automatically</span>}
+                </div>
+                {!lastInvite.email_sent && lastInvite.link && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <code className="flex-1 text-xs bg-white border border-slate-200 rounded px-2 py-1.5 truncate">{lastInvite.link}</code>
+                    <Button size="sm" variant="outline" onClick={() => copyLink(lastInvite.link)}>
+                      {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copied ? "Copied" : "Copy"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
             {invites.length > 0 && (
               <div className="mt-4">
                 <p className="text-xs font-medium text-slate-500 mb-2">Pending invites</p>
                 {invites.map((iv) => (
                   <div key={iv.id} className="flex items-center justify-between text-sm py-1.5">
                     <span className="text-slate-600">{iv.email} <span className="text-slate-400">· {iv.role}</span></span>
-                    <span className="text-xs text-amber-600">Pending</span>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="ghost" className="h-6" onClick={() => copyLink(`${window.location.origin}/accept-invite?token=${encodeURIComponent(iv.token)}`)}>
+                        {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                      </Button>
+                      <span className="text-xs text-amber-600">Pending</span>
+                    </div>
                   </div>
                 ))}
               </div>

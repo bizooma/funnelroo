@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/use-toast";
-import { Loader2, Check, Plus, Mail, Send, AlertTriangle, Info } from "lucide-react";
+import { Loader2, Check, Plus, Send, Info } from "lucide-react";
 
 // Resource + delivery configuration for a funnel. Lets the operator attach an
 // approved resource version, choose immediate access vs. access + email,
@@ -62,6 +62,19 @@ export function FunnelResourceTab({ funnel, draft, onChanged }) {
       await base44.functions.invoke("resourceAccess", { action: "attachToFunnel", resource_id: resourceId, funnel_id: funnel.id, resource_version_id: versionId });
       await onChanged();
       toast({ title: "Resource attached" });
+    } catch (e) {
+      toast({ title: "Failed", description: e.response?.data?.error || e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function detach() {
+    setSaving(true);
+    try {
+      await base44.functions.invoke("funnelAccess", { action: "detachResource", funnel_id: funnel.id });
+      await onChanged();
+      toast({ title: "Resource detached", description: "Published snapshots and existing grants are preserved." });
     } catch (e) {
       toast({ title: "Failed", description: e.response?.data?.error || e.message, variant: "destructive" });
     } finally {
@@ -151,7 +164,7 @@ export function FunnelResourceTab({ funnel, draft, onChanged }) {
                   <div className="font-medium text-slate-800">{resources.find((r) => r.id === attachedResourceId)?.title || "Resource"}</div>
                   <div className="text-xs text-slate-500">Version attached</div>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => attach(attachedResourceId, "")}>Detach</Button>
+                <Button size="sm" variant="outline" disabled={saving} onClick={detach}>Detach</Button>
               </div>
             ) : (
               <div className="space-y-2">

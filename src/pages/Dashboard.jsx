@@ -6,12 +6,12 @@ import AppShell from "@/components/AppShell";
 import { MascotBadge } from "@/components/MascotBadge";
 import { ComingSoon } from "@/components/ComingSoon";
 import { RooPanel } from "@/components/RooPanel";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FolderKanban, Plus, ArrowRight, Users, Calendar, BarChart3 } from "lucide-react";
+import { FolderKanban, Plus, ArrowRight, Users, Calendar } from "lucide-react";
 
 export default function Dashboard() {
-  const { current, loading, canPublish } = useWorkspace();
+  const { current, loading } = useWorkspace();
   const navigate = useNavigate();
   const [funnels, setFunnels] = useState([]);
   const [brief, setBrief] = useState(null);

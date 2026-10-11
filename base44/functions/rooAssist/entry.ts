@@ -35,6 +35,13 @@ export default async function (req) {
       await sr.entities.Offer.filter({ workspace_id: body.workspace_id })
     );
 
+    // Only approved audiences and offers are used as Roo context. Unapproved
+    // items are counted but not included — Roo must not draft from hypotheses
+    // the user has not approved.
+    const approvedAudiences = audiences.filter((a) => a.approved);
+    const approvedOffers = offers.filter((o) => o.approved);
+    const unapprovedCount = (audiences.length - approvedAudiences.length) + (offers.length - approvedOffers.length);
+
     const briefText = `BUSINESS BRIEF:
 - Business name: ${profile?.business_name || "(not set)"}
 - Website: ${profile?.website || "(not set)"}
@@ -45,8 +52,9 @@ export default async function (req) {
 - Approved facts: ${JSON.stringify(profile?.approved_facts || [])}
 - Language to use: ${JSON.stringify(profile?.language_to_use || [])}
 - Language to avoid: ${JSON.stringify(profile?.language_to_avoid || [])}
-AUDIENCES: ${JSON.stringify(audiences.map((a) => ({ name: a.name, problems: a.problems, objections: a.objections, desired_outcomes: a.desired_outcomes })))}
-OFFERS: ${JSON.stringify(offers.map((o) => ({ name: o.name, offer: o.offer, goal: o.goal, cta: o.cta })))}`;
+APPROVED AUDIENCES: ${JSON.stringify(approvedAudiences.map((a) => ({ name: a.name, problems: a.problems, objections: a.objections, desired_outcomes: a.desired_outcomes })))}
+APPROVED OFFERS: ${JSON.stringify(approvedOffers.map((o) => ({ name: o.name, offer: o.offer, goal: o.goal, cta: o.cta })))}
+${unapprovedCount > 0 ? `NOTE: ${unapprovedCount} unapproved audience/offer item(s) exist but are excluded from this context. Do not reference them; suggest the user review and approve them in Settings if relevant.` : ""}`;
 
     // ---- draftPageCopy: draft hero + benefits for a funnel type ----
     if (action === "draftPageCopy") {

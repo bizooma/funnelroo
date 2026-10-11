@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWorkspace } from "@/lib/workspaceContext";
+import { safeReturnTo } from "@/lib/authReturnTo";
 import { base44 } from "@/api/base44Client";
 import { MascotBadge } from "@/components/MascotBadge";
 import { Button } from "@/components/ui/button";
@@ -49,7 +50,7 @@ export default function Onboarding() {
         onboarding_complete: true,
       });
       await refresh();
-      navigate("/app");
+      navigate(safeReturnTo());
     } catch (e) {
       setError(e.response?.data?.error || e.message || "Could not save. Please try again.");
       setSaving(false);

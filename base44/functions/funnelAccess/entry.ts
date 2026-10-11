@@ -238,6 +238,23 @@ export default async function (req) {
       return ok({ draft: result });
     }
 
+    // ---- detachResource: clear draft references, preserve published snapshots + grants ----
+    if (action === "detachResource") {
+      const { funnel, workspaceId } = await resolveFunnelWorkspace(base44, body.funnel_id);
+      await requireMembership(base44, workspaceId, ["owner", "admin", "member"]);
+      const draft = firstRecord(
+        await sr.entities.FunnelDraft.filter({ funnel_id: funnel.id })
+      );
+      if (!draft) return err(400, "No draft to update");
+      // Clear both draft references. Published snapshots keep their resource_version_id
+      // and existing grants remain valid (they reference the version, not the draft).
+      await sr.entities.FunnelDraft.update(draft.id, {
+        resource_id: "",
+        resource_version_id: "",
+      });
+      return ok({ detached: true });
+    }
+
     // ---- publish: create immutable snapshot, set active ----
     if (action === "publish") {
       const { funnel, workspaceId } = await resolveFunnelWorkspace(base44, body.funnel_id);
@@ -258,6 +275,33 @@ export default async function (req) {
       }
       if (funnel.type === "direct_booking" && !checks.has_booking) {
         return err(400, "Direct booking funnels require a booking connection before publishing");
+      }
+      // Server-side form schema validation: the editor cannot produce a published
+      // capture form with no usable canonical/mapped email field.
+      const SUPPORTED_FIELD_TYPES = ["text", "email", "textarea"];
+      if (hasForm) {
+        const formBlock = blocks.find((b) => b.type === "form");
+        const formFields = formBlock?.props?.fields || [];
+        if (!formFields.length) {
+          return err(400, "The form has no fields. Add at least an email field before publishing.");
+        }
+        let hasEmail = false;
+        for (const f of formFields) {
+          if (!f.name || !String(f.name).trim()) {
+            return err(400, "Every form field needs a name. Fix the empty field name before publishing.");
+          }
+          if (!f.label || !String(f.label).trim()) {
+            return err(400, `Field "${f.name}" has no label. Add a label before publishing.`);
+          }
+          const ft = String(f.type || "text");
+          if (!SUPPORTED_FIELD_TYPES.includes(ft)) {
+            return err(400, `Field "${f.name}" has an unsupported type ("${ft}"). Supported: text, email, textarea.`);
+          }
+          if (ft === "email" || String(f.name).toLowerCase() === "email") hasEmail = true;
+        }
+        if (!hasEmail) {
+          return err(400, "The form must include an email field (type \"email\" or name \"email\") for contact capture.");
+        }
       }
       const deliveryMode = draft.delivery_mode || "immediate_only";
       let senderVerified = false;

@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { PageRenderer } from "@/components/funnel/PageRenderer";
 import { MascotBadge } from "@/components/MascotBadge";
-import { Loader2, FileQuestion, RefreshCw } from "lucide-react";
+import { Loader2, FileQuestion } from "lucide-react";
 
 // Anonymous public funnel page. No auth required. Reads only the approved
 // published snapshot (resolved by immutable public_id), submits the form with

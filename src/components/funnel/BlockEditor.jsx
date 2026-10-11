@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { PageRenderer } from "@/components/funnel/PageRenderer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +42,7 @@ function newBlock(type) {
   return base;
 }
 
-export function BlockEditor({ blocks, theme, onSave, saving }) {
+export function BlockEditor({ blocks, theme, onSave, saving, onDirtyChange, onBlocksChange }) {
   const [local, setLocal] = useState(blocks || []);
   const [selected, setSelected] = useState(null);
   const [preview, setPreview] = useState(false);
@@ -51,9 +51,37 @@ export function BlockEditor({ blocks, theme, onSave, saving }) {
 
   const sel = local.find((b) => b.id === selected) || null;
 
+  // Notify parent when dirty state changes, so tab switches and publish
+  // can prompt a save/discard decision instead of silently losing changes.
+  useEffect(() => {
+    if (onDirtyChange) onDirtyChange(dirty);
+  }, [dirty]);
+
+  // Send the current local blocks to the parent whenever they change, so the
+  // parent can save them if the user confirms a save in the dirty dialog.
+  useEffect(() => {
+    if (onBlocksChange) onBlocksChange(local);
+  }, [local]);
+
+  // Keep local in sync when the parent blocks change (e.g. after a server save
+  // reloads the draft). Only reset when blocks actually change AND we're not
+  // currently dirty (avoid overwriting unsaved edits).
+  useEffect(() => {
+    if (!dirty) setLocal(blocks || []);
+  }, [blocks]);
+
   function update(next) {
     setLocal(next);
     setDirty(true);
+  }
+
+  function discard() {
+    setLocal(blocks || []);
+    setDirty(false);
+  }
+
+  function markSaved() {
+    setDirty(false);
   }
 
   function setProp(key, val) {
@@ -116,10 +144,17 @@ export function BlockEditor({ blocks, theme, onSave, saving }) {
             </div>
           )}
         </div>
-        <Button className="w-full mt-3" disabled={!dirty || saving} onClick={() => onSave(local)}>
-          {saving ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Save className="w-4 h-4 mr-1.5" />}
-          {saving ? "Saving…" : dirty ? "Save changes" : "Saved"}
-        </Button>
+        <div className="flex gap-2 mt-3">
+          <Button className="flex-1" disabled={!dirty || saving} onClick={() => onSave(local).then(() => markSaved())}>
+            {saving ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Save className="w-4 h-4 mr-1.5" />}
+            {saving ? "Saving…" : dirty ? "Save changes" : "Saved"}
+          </Button>
+          {dirty && !saving && (
+            <Button variant="outline" onClick={discard} title="Discard changes">
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Selected block editor */}

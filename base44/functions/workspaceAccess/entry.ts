@@ -114,7 +114,36 @@ export default async function (req) {
         expires_at: expires,
         invited_by: user.id,
       });
-      return ok({ invite });
+      // Build the acceptance link and try to send a real invitation email.
+      // If the email send fails (e.g. recipient is not a registered user and
+      // the plan/domain doesn't allow it), the caller still gets the link to
+      // share manually — the invitation is created either way.
+      const origin = (() => { try { return new URL(req.url).origin; } catch { return ""; } })();
+      const inviteLink = `${origin}/accept-invite?token=${encodeURIComponent(token)}`;
+      const workspace = firstRecord(await sr.entities.Workspace.filter({ id: body.workspace_id }));
+      const wsName = workspace?.name || "your workspace";
+      let emailSent = false;
+      let emailError = "";
+      try {
+        await sr.integrations.Core.SendEmail({
+          to: email,
+          subject: `You're invited to join ${wsName} on FunnelRoo`,
+          body: `<!DOCTYPE html><html><body style="font-family:Arial,Arial,sans-serif;padding:24px;max-width:520px;margin:0 auto;">
+<h2 style="color:#0a0a0a;">You're invited to join ${escapeHtml(wsName)}</h2>
+<p style="color:#0a0a0a;font-size:15px;line-height:1.6;">${escapeHtml(user.full_name || user.email)} invited you to collaborate on FunnelRoo as a ${role}. Click the button below to accept the invitation and access the workspace.</p>
+<p style="margin:24px 0;">
+<a href="${escapeHtml(inviteLink)}" style="display:inline-block;background:#0a0a0a;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:6px;font-size:15px;font-weight:bold;">Accept invitation</a>
+</p>
+<p style="color:#64748b;font-size:13px;">If the button doesn't work, copy this link into your browser:<br/><span style="word-break:break-all;">${escapeHtml(inviteLink)}</span></p>
+<p style="color:#64748b;font-size:12px;margin-top:24px;">This invitation expires in 7 days. If you weren't expecting it, you can ignore this email.</p>
+</body></html>`,
+          from_name: "FunnelRoo",
+        });
+        emailSent = true;
+      } catch (e) {
+        emailError = String(e?.message || e);
+      }
+      return ok({ invite, invite_link: inviteLink, email_sent: emailSent, email_error: emailError });
     }
 
     // ---- listInvites ----
@@ -286,4 +315,8 @@ export default async function (req) {
     if (e instanceof HttpError) return err(e.status, e.message);
     return err(500, e.message);
   }
+}
+
+function escapeHtml(s) {
+  return String(s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }

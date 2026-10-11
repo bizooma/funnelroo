@@ -8,13 +8,14 @@ import { FunnelResourceTab } from "@/components/funnel/FunnelResourceTab";
 import { ComingSoon } from "@/components/ComingSoon";
 import { RooPanel } from "@/components/RooPanel";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "@/components/ui/use-toast";
 import {
-  Loader2, Rocket, Pause, Play, ExternalLink, Check, X, Sparkles, ArrowLeft,
+  Loader2, Rocket, Pause, Play, ExternalLink, Check, X, ArrowLeft,
 } from "lucide-react";
 
 const TABS = [
@@ -37,18 +38,33 @@ export default function FunnelWorkspace() {
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [brief, setBrief] = useState({ audiences: [], offers: [] });
+  const [dirty, setDirty] = useState(false);
+  const [dirtyBlocks, setDirtyBlocks] = useState(null);
+  const [pendingTab, setPendingTab] = useState(null);
+  const { switchWorkspace, workspaces } = useWorkspace();
 
   async function load() {
-    if (!current || !id) return;
+    if (!id) return;
     setLoading(true);
     try {
-      const [fRes, bRes] = await Promise.all([
-        base44.functions.invoke("funnelAccess", { action: "get", funnel_id: id }),
-        base44.functions.invoke("briefAccess", { action: "getBrief", workspace_id: current.id }),
-      ]);
-      setFunnel(fRes.data?.funnel);
+      const fRes = await base44.functions.invoke("funnelAccess", { action: "get", funnel_id: id });
+      const f = fRes.data?.funnel;
+      setFunnel(f);
       setDraft(fRes.data?.draft);
-      setBrief({ audiences: bRes.data?.audiences || [], offers: bRes.data?.offers || [] });
+      // Workspace consistency: if the funnel belongs to a different workspace
+      // than the currently selected one, switch to the funnel's workspace so
+      // the sidebar and brief match. Never mix one funnel with another workspace's brief.
+      if (f && current && f.workspace_id !== current.id) {
+        const match = workspaces.find((w) => w.id === f.workspace_id);
+        if (match) {
+          await switchWorkspace(match);
+          return; // switchWorkspace triggers a reload via the context; this load is stale
+        }
+      }
+      if (f && current) {
+        const bRes = await base44.functions.invoke("briefAccess", { action: "getBrief", workspace_id: f.workspace_id });
+        setBrief({ audiences: bRes.data?.audiences || [], offers: bRes.data?.offers || [] });
+      }
     } catch (e) {
       toast({ title: "Could not load funnel", description: e.response?.data?.error || e.message, variant: "destructive" });
     } finally {
@@ -56,7 +72,7 @@ export default function FunnelWorkspace() {
     }
   }
 
-  useEffect(() => { load(); }, [current, id]);
+  useEffect(() => { load(); }, [id, current?.id]);
 
   async function saveBlocks(blocks) {
     setSaving(true);
@@ -68,18 +84,52 @@ export default function FunnelWorkspace() {
       toast({ title: "Saved" });
     } catch (e) {
       toast({ title: "Save failed", description: e.response?.data?.error || e.message, variant: "destructive" });
+      throw e;
     } finally {
       setSaving(false);
     }
   }
 
+  function handleTabChange(newTab) {
+    if (dirty && newTab !== tab) {
+      setPendingTab(newTab);
+    } else {
+      setTab(newTab);
+    }
+  }
+
+  async function saveAndSwitchTab() {
+    try {
+      if (dirtyBlocks) await saveBlocks(dirtyBlocks);
+      setDirty(false);
+      setTab(pendingTab);
+    } catch (e) {
+      // saveBlocks already shows a toast
+    } finally {
+      setPendingTab(null);
+    }
+  }
+
+  function discardAndSwitchTab() {
+    setDirty(false);
+    setTab(pendingTab);
+    setPendingTab(null);
+  }
+
   async function publish() {
     setPublishing(true);
     try {
+      // If there are unsaved page edits, save them first so the published
+      // snapshot reflects the current editor state.
+      if (dirty) {
+        toast({ title: "Save your page changes first", description: "Click Save changes in the Pages tab before publishing." });
+        setTab("pages");
+        setPublishing(false);
+        return;
+      }
       // compute checks from draft
       const blocks = draft?.page_blocks || [];
       const hasForm = blocks.some((b) => b.type === "form");
-      const hasResource = blocks.some((b) => b.type === "resource");
       const hasBooking = blocks.some((b) => b.type === "booking" && b.props?.calendly_url);
       const checks = { has_form: hasForm, has_resource: !!draft?.resource_version_id, has_booking: hasBooking, has_sender: draft?.delivery_mode === "immediate_plus_email" && !!draft?.sender_id };
       await base44.functions.invoke("funnelAccess", { action: "saveDraft", funnel_id: id, publishing_checks: checks });
@@ -125,7 +175,7 @@ export default function FunnelWorkspace() {
     { label: "Landing page sections", ok: blocks.length >= 2 },
     { label: "Lead form", ok: checks.has_form, needed: funnel.type !== "direct_booking" },
     { label: "Approved resource version", ok: checks.has_resource, needed: funnel.type === "lead_magnet" },
-    { label: "Verified sender (email delivery)", ok: checks.has_sender, needed: funnel.type === "lead_magnet" && draft?.delivery_mode === "immediate_plus_email" },
+    { label: "Email sender", ok: checks.has_sender, needed: funnel.type === "lead_magnet" && draft?.delivery_mode === "immediate_plus_email" },
     { label: "Booking connection", ok: checks.has_booking, needed: funnel.type === "direct_booking" || funnel.type === "lead_magnet" },
   ].filter((r) => r.needed !== false);
 
@@ -172,7 +222,7 @@ export default function FunnelWorkspace() {
           {TABS.map((t) => (
             <button
               key={t.id}
-              onClick={() => setTab(t.id)}
+              onClick={() => handleTabChange(t.id)}
               className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${tab === t.id ? "text-indigo-600" : "text-slate-500 hover:text-slate-700"}`}
             >
               {t.label}
@@ -239,7 +289,7 @@ export default function FunnelWorkspace() {
         )}
 
         {tab === "pages" && (
-          <BlockEditor blocks={blocks} theme={draft?.theme} saving={saving} onSave={saveBlocks} />
+          <BlockEditor blocks={blocks} theme={draft?.theme} saving={saving} onSave={saveBlocks} onDirtyChange={setDirty} onBlocksChange={setDirtyBlocks} />
         )}
 
         {tab === "resource" && (
@@ -254,6 +304,21 @@ export default function FunnelWorkspace() {
         {tab === "results" && (
           <Card><CardContent><ComingSoon title="Funnel results" description="Sessions, accepted forms, acquired leads, confirmed bookings, attendance and won outcomes — with template-specific metrics." phase="Follow-on Phase 3" /></CardContent></Card>
         )}
+
+        {/* Dirty tab switch dialog — prevents silently losing unsaved page edits */}
+        <Dialog open={!!pendingTab} onOpenChange={(v) => !v && setPendingTab(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Save your changes?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-slate-500 py-2">You have unsaved page edits. Save them before switching, or discard to lose them.</p>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setPendingTab(null)}>Cancel</Button>
+              <Button variant="outline" onClick={discardAndSwitchTab}>Discard</Button>
+              <Button onClick={saveAndSwitchTab}>Save &amp; continue</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppShell>
   );
