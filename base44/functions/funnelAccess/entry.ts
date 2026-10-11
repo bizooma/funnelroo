@@ -199,8 +199,19 @@ export default async function (req) {
         await sr.entities.FunnelDraft.filter({ funnel_id: funnel.id })
       );
       const update = {};
-      for (const k of ["page_blocks", "theme", "form_config", "resource_id", "sequence_ref", "booking_config", "publishing_checks", "wizard_progress"]) {
+      for (const k of ["page_blocks", "theme", "form_config", "resource_id", "sequence_ref", "booking_config", "publishing_checks", "wizard_progress", "booking_cta_label", "booking_cta_copy"]) {
         if (body[k] !== undefined) update[k] = body[k];
+      }
+      // booking_event_type_id: validate workspace ownership
+      if (body.booking_event_type_id !== undefined) {
+        const etId = String(body.booking_event_type_id || "").trim();
+        if (etId) {
+          const et = firstRecord(
+            await sr.entities.BookingEventType.filter({ id: etId, workspace_id: workspaceId })
+          );
+          if (!et) return err(400, "Booking event type does not belong to this workspace");
+        }
+        update.booking_event_type_id = etId;
       }
       // delivery_mode: validate enum
       if (body.delivery_mode !== undefined) {

@@ -4,8 +4,8 @@ import { useWorkspace } from "@/lib/workspaceContext";
 import { base44 } from "@/api/base44Client";
 import AppShell from "@/components/AppShell";
 import { MascotBadge } from "@/components/MascotBadge";
-import { ComingSoon } from "@/components/ComingSoon";
 import { RooPanel } from "@/components/RooPanel";
+import ConversionReport from "@/components/dashboard/ConversionReport";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FolderKanban, Plus, ArrowRight, Users, Calendar } from "lucide-react";
@@ -15,17 +15,24 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [funnels, setFunnels] = useState([]);
   const [brief, setBrief] = useState(null);
+  const [stats, setStats] = useState({ contacts: null, bookings: null });
 
   useEffect(() => {
     if (!current) return;
     (async () => {
       try {
-        const [fRes, bRes] = await Promise.all([
+        const [fRes, bRes, rRes] = await Promise.all([
           base44.functions.invoke("funnelAccess", { action: "list", workspace_id: current.id }),
           base44.functions.invoke("briefAccess", { action: "getBrief", workspace_id: current.id }),
+          base44.functions.invoke("bookingAccess", { action: "report", workspace_id: current.id }),
         ]);
         setFunnels(fRes.data?.funnels || []);
         setBrief(bRes.data);
+        const m = rRes.data?.metrics || {};
+        setStats({
+          contacts: m.captured_leads ?? null,
+          bookings: m.gross_booked_appointments ?? null,
+        });
       } catch {}
     })();
   }, [current]);
@@ -78,8 +85,8 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-3 gap-4 mb-8">
           <StatCard icon={FolderKanban} label="Funnels" value={funnels.length} sub={`${published.length} live · ${drafts.length} draft`} />
-          <StatCard icon={Users} label="Contacts" value="—" sub="Next release" />
-          <StatCard icon={Calendar} label="Bookings" value="—" sub="Next release" />
+          <StatCard icon={Users} label="Leads" value={stats.contacts ?? "—"} sub={stats.contacts === null ? "Loading…" : "Captured"} />
+          <StatCard icon={Calendar} label="Bookings" value={stats.bookings ?? "—"} sub={stats.bookings === null ? "Loading…" : "Gross booked"} />
         </div>
 
         <h2 className="text-sm font-semibold text-slate-700 mb-3">Recent funnels</h2>
@@ -112,10 +119,8 @@ export default function Dashboard() {
         )}
 
         <div className="mt-10">
-          <h2 className="text-sm font-semibold text-slate-700 mb-3">Reporting</h2>
-          <Card>
-            <ComingSoon title="Activity & cohort reporting" description="Sessions, accepted forms, acquired leads, confirmed bookings, attendance and won outcomes — with template-specific metrics." phase="Follow-on Phase 3" />
-          </Card>
+          <h2 className="text-sm font-semibold text-slate-700 mb-3">Conversion reporting</h2>
+          <ConversionReport />
         </div>
       </div>
     </AppShell>
