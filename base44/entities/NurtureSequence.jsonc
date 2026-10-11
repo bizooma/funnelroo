@@ -1,0 +1,74 @@
+{
+  "name": "NurtureSequence",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "funnel_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "ready",
+        "active",
+        "paused",
+        "archived"
+      ],
+      "default": "draft"
+    },
+    "current_version_id": {
+      "type": "string"
+    },
+    "sender_id": {
+      "type": "string"
+    },
+    "reply_to": {
+      "type": "string"
+    },
+    "booking_url": {
+      "type": "string"
+    },
+    "draft_steps": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "sending_enabled": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "workspace_id",
+    "name"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

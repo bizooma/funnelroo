@@ -1,0 +1,59 @@
+{
+  "name": "ProviderEvent",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "provider": {
+      "type": "string",
+      "default": "resend"
+    },
+    "provider_event_id": {
+      "type": "string"
+    },
+    "message_id": {
+      "type": "string"
+    },
+    "nurture_message_id": {
+      "type": "string"
+    },
+    "event_type": {
+      "type": "string"
+    },
+    "result": {
+      "type": "string"
+    },
+    "processed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "provider",
+    "provider_event_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

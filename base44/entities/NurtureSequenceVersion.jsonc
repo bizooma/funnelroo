@@ -1,0 +1,85 @@
+{
+  "name": "NurtureSequenceVersion",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "sequence_id": {
+      "type": "string"
+    },
+    "version_number": {
+      "type": "number"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "sender_id": {
+      "type": "string"
+    },
+    "reply_to": {
+      "type": "string"
+    },
+    "booking_url": {
+      "type": "string"
+    },
+    "approved_context": {
+      "type": "object",
+      "properties": {
+        "audience_id": {
+          "type": "string"
+        },
+        "offer_id": {
+          "type": "string"
+        },
+        "resource_version_id": {
+          "type": "string"
+        },
+        "funnel_type": {
+          "type": "string"
+        }
+      }
+    },
+    "approved_by": {
+      "type": "string"
+    },
+    "approved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "active": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "workspace_id",
+    "sequence_id",
+    "version_number"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

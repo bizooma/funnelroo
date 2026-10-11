@@ -1,0 +1,116 @@
+{
+  "name": "NurtureMessage",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "enrollment_id": {
+      "type": "string"
+    },
+    "step_index": {
+      "type": "number"
+    },
+    "message_identity": {
+      "type": "string"
+    },
+    "recipient_email": {
+      "type": "string"
+    },
+    "recipient_name": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "body_html": {
+      "type": "string"
+    },
+    "body_text": {
+      "type": "string"
+    },
+    "cta_label": {
+      "type": "string"
+    },
+    "cta_url": {
+      "type": "string"
+    },
+    "due_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "attempts": {
+      "type": "number",
+      "default": 0
+    },
+    "claim_lease_expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "provider_message_id": {
+      "type": "string"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "processing",
+        "provider_accepted",
+        "delivered",
+        "retryable_failure",
+        "permanently_failed",
+        "suppressed",
+        "needs_reconciliation"
+      ],
+      "default": "queued"
+    },
+    "first_attempt_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_attempt_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "last_error": {
+      "type": "string"
+    },
+    "sent_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "enrollment_id",
+    "step_index",
+    "message_identity",
+    "recipient_email",
+    "idempotency_key"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

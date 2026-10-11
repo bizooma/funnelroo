@@ -1,0 +1,96 @@
+{
+  "name": "NurtureEnrollment",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "contact_id": {
+      "type": "string"
+    },
+    "funnel_id": {
+      "type": "string"
+    },
+    "submission_id": {
+      "type": "string"
+    },
+    "sequence_id": {
+      "type": "string"
+    },
+    "sequence_version_id": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "current_step": {
+      "type": "number",
+      "default": 0
+    },
+    "next_due_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "active",
+        "paused",
+        "completed",
+        "stopped",
+        "suppressed"
+      ],
+      "default": "active"
+    },
+    "stop_reason": {
+      "type": "string"
+    },
+    "stopped_by": {
+      "type": "string"
+    },
+    "stopped_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "enrolled_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "skip_reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "contact_id",
+    "sequence_id",
+    "sequence_version_id",
+    "run_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
