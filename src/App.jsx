@@ -25,6 +25,7 @@ import Resources from '@/pages/Resources';
 import PublicFunnel from '@/pages/PublicFunnel';
 import ResourceAccess from '@/pages/ResourceAccess';
 import AcceptInvite from '@/pages/AcceptInvite';
+import Unsubscribe from '@/pages/Unsubscribe';
 import Marketing from '@/pages/Marketing';
 import { LoginRedirect } from '@/components/ProtectedRoute';
 
@@ -44,6 +45,7 @@ function App() {
             <Route path="/f/:publicId" element={<PublicFunnel />} />
             <Route path="/r/:token" element={<ResourceAccess />} />
             <Route path="/accept-invite" element={<AcceptInvite />} />
+            <Route path="/u/:token" element={<Unsubscribe />} />
 
             {/* Protected routes — require authentication */}
             <Route element={<ProtectedRoute unauthenticatedElement={<LoginRedirect />} />}>

@@ -206,9 +206,12 @@ export default async function (req) {
       }
       if (target.id === membership.id) return err(400, "You are already the owner");
       if (target.status !== "active") return err(400, "Target member is not active");
-      // Demote current owner to admin, promote target to owner
-      await sr.entities.Membership.update(membership.id, { role: "admin" });
+      // Demote current owner to admin, promote target to owner.
+      // Also update Workspace.owner_id consistently — a partial failure here
+      // must not leave the workspace without a valid owner_id.
       await sr.entities.Membership.update(target.id, { role: "owner" });
+      await sr.entities.Workspace.update(body.workspace_id, { owner_id: target.user_id });
+      await sr.entities.Membership.update(membership.id, { role: "admin" });
       return ok({ transferred: true });
     }
 
@@ -250,12 +253,16 @@ export default async function (req) {
       if (invite.email !== String(user.email || "").toLowerCase()) {
         return err(403, "This invite was sent to a different email address. Log in with the correct account.");
       }
-      // Atomically claim the invite so concurrent acceptances don't double-process
+      // Atomically claim the invite so concurrent acceptances don't double-process.
+      // If the claim fails (already accepted), we still resume — the membership
+      // write may have failed on a prior attempt, and this call must complete it.
       await sr.entities.Invite.updateMany(
         { id: invite.id, status: "pending" },
         { $set: { status: "accepted" } }
       );
-      // Create or update membership, preserving ownership and never downgrading
+      // Create or update membership, preserving ownership and never downgrading.
+      // This is idempotent: a retry after partial failure finds the accepted
+      // invite and completes the membership write.
       const existing = firstRecord(
         await sr.entities.Membership.filter({
           workspace_id: invite.workspace_id,
@@ -265,23 +272,27 @@ export default async function (req) {
       let finalRole = invite.role;
       if (existing) {
         if (existing.role === "owner") {
-          // Preserve ownership — never downgrade an owner
           finalRole = "owner";
-          await sr.entities.Membership.update(existing.id, { status: "active" });
+          if (existing.status !== "active") {
+            await sr.entities.Membership.update(existing.id, { status: "active" });
+          }
         } else {
-          // Only upgrade (member → admin), never downgrade
           finalRole = (invite.role === "admin" && existing.role === "member") ? "admin" : existing.role;
           await sr.entities.Membership.update(existing.id, { status: "active", role: finalRole });
         }
       } else {
-        await sr.entities.Membership.create({
-          workspace_id: invite.workspace_id,
-          user_id: user.id,
-          user_email: user.email,
-          user_name: user.full_name,
-          role: invite.role,
-          status: "active",
-        });
+        try {
+          await sr.entities.Membership.create({
+            workspace_id: invite.workspace_id,
+            user_id: user.id,
+            user_email: user.email,
+            user_name: user.full_name,
+            role: invite.role,
+            status: "active",
+          });
+        } catch {
+          // Concurrent create may have won — check and continue
+        }
         // Dedup in case of concurrent creates
         const dups = asArray(
           await sr.entities.Membership.filter({ workspace_id: invite.workspace_id, user_id: user.id })

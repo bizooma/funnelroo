@@ -1,0 +1,44 @@
+{
+  "description": "Processes due nurture messages every 5 minutes \u2014 claims, sends via provider, schedules next step",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "*/5 * * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "name": "Nurture Dispatch",
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "nurture_dispatch",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "dispatch": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "nurtureDispatch"
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Process due nurture emails",
+            "description": "Sends due follow-up messages across all workspaces"
+          }
+        }
+      }
+    ]
+  }
+}

@@ -5,6 +5,7 @@ import { base44 } from "@/api/base44Client";
 import AppShell from "@/components/AppShell";
 import { BlockEditor } from "@/components/funnel/BlockEditor";
 import { FunnelResourceTab } from "@/components/funnel/FunnelResourceTab";
+import { NurtureTab } from "@/components/funnel/NurtureTab";
 import { ComingSoon } from "@/components/ComingSoon";
 import { RooPanel } from "@/components/RooPanel";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,7 @@ const TABS = [
   { id: "plan", label: "Plan" },
   { id: "pages", label: "Pages" },
   { id: "resource", label: "Resource" },
-  { id: "followup", label: "Follow-up", soon: "Phase 2-3" },
+  { id: "followup", label: "Nurture" },
   { id: "traffic", label: "Traffic", soon: "Phase 3" },
   { id: "results", label: "Results", soon: "Phase 3" },
 ];
@@ -279,8 +280,8 @@ export default function FunnelWorkspace() {
                     </div>
                   ))}
                   <div className="flex items-center gap-2.5 text-sm">
-                    <X className="w-4 h-4 text-slate-300" />
-                    <span className="text-slate-400">Email sender & nurture sequence <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded ml-1">Phase 2-3</span></span>
+                    {draft?.sequence_ref ? <Check className="w-4 h-4 text-emerald-500" /> : <X className="w-4 h-4 text-slate-300" />}
+                    <span className={draft?.sequence_ref ? "text-slate-700" : "text-slate-400"}>Nurture sequence</span>
                   </div>
                 </div>
               </CardContent>
@@ -296,7 +297,7 @@ export default function FunnelWorkspace() {
           <FunnelResourceTab funnel={funnel} draft={draft} onChanged={load} />
         )}
         {tab === "followup" && (
-          <Card><CardContent><ComingSoon title="Nurture sequences" description="Approved email sequences with delays, eligibility checks and stop rules. One active promotional sequence per contact per workspace." phase="Follow-on Phase 2-3" /></CardContent></Card>
+          <NurtureTab funnel={funnel} draft={draft} onChanged={load} />
         )}
         {tab === "traffic" && (
           <Card><CardContent><ComingSoon title="Campaigns & traffic" description="Ad copy, image briefs, UTM-tagged links and manual/CSV spend imports. No automatic ad buying in V1." phase="Follow-on Phase 3" /></CardContent></Card>

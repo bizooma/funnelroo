@@ -80,6 +80,53 @@ export default async function (req) {
       const funnels = funnelIds.length ? asArray(await sr.entities.Funnel.filter({ id: { $in: funnelIds } })) : [];
       const funnelsById = {};
       funnels.forEach((f) => (funnelsById[f.id] = f));
+      // Load nurture enrollments + messages for this contact
+      const enrollments = asArray(
+        await sr.entities.NurtureEnrollment.filter(
+          { workspace_id: contact.workspace_id, contact_id: contact.id },
+          { sort: "-enrolled_at" }
+        )
+      );
+      let nurtureData = [];
+      if (enrollments.length) {
+        const seqIds = [...new Set(enrollments.map((e) => e.sequence_id))];
+        const sequences = asArray(await sr.entities.NurtureSequence.filter({ id: { $in: seqIds } }));
+        const seqById = {};
+        sequences.forEach((s) => (seqById[s.id] = s));
+        for (const e of enrollments) {
+          const messages = asArray(
+            await sr.entities.NurtureMessage.filter(
+              { enrollment_id: e.id },
+              { sort: "step_index" }
+            )
+          );
+          nurtureData.push({
+            id: e.id,
+            sequence_name: seqById[e.sequence_id]?.name || "—",
+            sequence_status: seqById[e.sequence_id]?.status || "—",
+            state: e.state,
+            current_step: e.current_step,
+            next_due_at: e.next_due_at,
+            enrolled_at: e.enrolled_at,
+            stop_reason: e.stop_reason || "",
+            messages: messages.map((m) => ({
+              step_index: m.step_index,
+              outcome: m.outcome,
+              due_at: m.due_at,
+              sent_at: m.sent_at,
+              subject: m.subject,
+              last_error: m.last_error || "",
+            })),
+          });
+        }
+      }
+      // Load suppression records
+      const suppressions = asArray(
+        await sr.entities.Suppression.filter({
+          workspace_id: contact.workspace_id,
+          email_normalized: contact.email_normalized,
+        })
+      );
       return ok({
         contact,
         leads: asArray(leads).map((l) => ({ ...l, funnel_name: funnelsById[l.funnel_id]?.name || "—" })),
@@ -87,6 +134,8 @@ export default async function (req) {
         grants,
         delivery_jobs: jobs,
         consents: asArray(consents),
+        nurture: nurtureData,
+        suppressions,
       });
     }
 

@@ -1,6 +1,7 @@
 import { createClientFromRequest } from "npm:@base44/sdk@0.8.52";
 import { firstRecord, asArray, ok, err, computeFingerprint, dedupKeepOldest } from "../../shared/auth.ts";
 import { processDeliveryJob } from "../../shared/delivery.ts";
+import { tryEnroll } from "../../shared/nurture.ts";
 
 // Public, anonymous form capture. No auth. Resolves the funnel from its
 // immutable public_id + a client-supplied published_version_id binding, validates
@@ -259,13 +260,13 @@ async function fulfill(sr, base44, funnel, submission, origin) {
   }
 
   // --- Lead: upsert + dedup + set first_submission_id if new ---
+  // Do NOT set latest_submission_id/last_seen_at in the upsert — a retry of
+  // an older submission must not move them ahead of a newer accepted event.
   await sr.entities.FunnelLead.upsert(
     [{
       workspace_id: funnel.workspace_id,
       funnel_id: funnel.id,
       contact_id: contact.id,
-      latest_submission_id: submission.id,
-      last_seen_at: now,
     }],
     { key: ["funnel_id", "contact_id"] }
   );
@@ -283,6 +284,12 @@ async function fulfill(sr, base44, funnel, submission, origin) {
         acquisition_campaign: submission.campaign || "",
       },
     }
+  );
+  // Only advance latest_submission_id/last_seen_at if this submission is newer
+  // (or never set). Retrying an older submission must not move them backwards.
+  await sr.entities.FunnelLead.updateMany(
+    { id: lead.id, $or: [{ last_seen_at: null }, { last_seen_at: { $lt: now } }] },
+    { $set: { latest_submission_id: submission.id, last_seen_at: now } }
   );
   lead = firstRecord(await sr.entities.FunnelLead.filter({ id: lead.id }));
 
@@ -361,6 +368,16 @@ async function fulfill(sr, base44, funnel, submission, origin) {
 
   // Mark fulfilled
   await sr.entities.Submission.update(submission.id, { processing_state: "fulfilled" });
+
+  // --- Nurture enrollment (if eligible) ---
+  // Enrollment failure must not fail the submission — the resource is already delivered.
+  // tryEnroll checks: snapshot has sequence version, contact opted in, no suppression,
+  // no existing enrollment, no booking outcome, sequence + funnel active.
+  try {
+    await tryEnroll(sr, base44, funnel.workspace_id, contact.id, funnel.id, submission.id, snapshot, origin);
+  } catch (e) {
+    // Log but don't fail — the submission and resource delivery are complete.
+  }
 
   return buildConfirmation(sr, funnel, snapshot, grant, job, origin);
 }

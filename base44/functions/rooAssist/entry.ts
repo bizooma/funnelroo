@@ -142,6 +142,86 @@ Return JSON matching this schema: ${JSON.stringify(schema)}`;
       return ok({ draft: result, ai_suggested: true });
     }
 
+    // ---- draftSequence: propose a complete 4-email nurture sequence ----
+    if (action === "draftSequence") {
+      const funnelType = body.funnel_type || "lead_magnet";
+      const schema = {
+        type: "object",
+        properties: {
+          steps: {
+            type: "array",
+            minItems: 4,
+            maxItems: 4,
+            items: {
+              type: "object",
+              properties: {
+                delay_hours: { type: "number" },
+                subject: { type: "string" },
+                preview: { type: "string" },
+                body: { type: "string" },
+                cta_label: { type: "string" },
+                cta_url: { type: "string" },
+              },
+            },
+          },
+          notes: { type: "string" },
+        },
+      };
+      const prompt = `${SYSTEM_RULES}
+
+${briefText}
+
+Funnel type: ${funnelType}
+Draft a 4-email nurture sequence for this business. Use these defaults:
+- Step 1 (delay 0): A useful first step related to the requested resource or inquiry.
+- Step 2 (delay 48): An educational tip or common mistake.
+- Step 3 (delay 48): Address an objection; include proof only if approved evidence exists.
+- Step 4 (delay 72): A clear invitation to book or take the next action.
+
+Rules:
+- Use only merge fields {{first_name}}, {{business_name}}, {{offer_name}}, {{booking_url}}, {{resource_title}}.
+- For step 4 CTA URL, use {{booking_url}}.
+- Do NOT invent testimonials, statistics, discounts, guarantees, or scarcity.
+- If proof is missing, keep the objection response general and note it.
+- Body should be simple HTML (paragraphs with <p> tags).
+Return JSON matching this schema: ${JSON.stringify(schema)}`;
+      const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
+        prompt,
+        response_json_schema: schema,
+      });
+      return ok({ draft: result, ai_suggested: true });
+    }
+
+    // ---- rewriteStep: rewrite a single email step ----
+    if (action === "rewriteStep") {
+      const step = body.step || {};
+      const instruction = body.instruction || "improve clarity and tone";
+      const schema = {
+        type: "object",
+        properties: {
+          delay_hours: { type: "number" },
+          subject: { type: "string" },
+          preview: { type: "string" },
+          body: { type: "string" },
+          cta_label: { type: "string" },
+          cta_url: { type: "string" },
+          notes: { type: "string" },
+        },
+      };
+      const prompt = `${SYSTEM_RULES}
+
+${briefText}
+
+Rewrite this nurture email. Instruction: ${instruction}
+Current step: ${JSON.stringify(step)}
+Keep the same merge fields. Do not invent proof or statistics. Return JSON matching this schema: ${JSON.stringify(schema)}`;
+      const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
+        prompt,
+        response_json_schema: schema,
+      });
+      return ok({ draft: result, ai_suggested: true });
+    }
+
     // ---- suggestNextStep: Roo explains the next useful action ----
     if (action === "suggestNextStep") {
       const context = body.context || {};

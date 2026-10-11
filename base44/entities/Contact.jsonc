@@ -40,6 +40,23 @@
     },
     "notes": {
       "type": "string"
+    },
+    "unsubscribe_token": {
+      "type": "string"
+    },
+    "booking_outcome": {
+      "type": "string",
+      "enum": [
+        "booked",
+        "not_interested"
+      ]
+    },
+    "booking_outcome_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "booking_outcome_by": {
+      "type": "string"
     }
   },
   "required": [

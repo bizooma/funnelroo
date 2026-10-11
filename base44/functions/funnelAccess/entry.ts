@@ -334,6 +334,21 @@ export default async function (req) {
           active: false,
         });
       }
+      // Resolve nurture sequence version (if the funnel has one with an approved version)
+      let nurtureSequenceVersionId = "";
+      if (draft.sequence_ref) {
+        const nurtureSeq = firstRecord(
+          await sr.entities.NurtureSequence.filter({ id: draft.sequence_ref, workspace_id: workspaceId })
+        );
+        if (nurtureSeq?.current_version_id) {
+          const nurtureVer = firstRecord(
+            await sr.entities.NurtureSequenceVersion.filter({ id: nurtureSeq.current_version_id, workspace_id: workspaceId })
+          );
+          if (nurtureVer?.active) {
+            nurtureSequenceVersionId = nurtureVer.id;
+          }
+        }
+      }
       const snapshot = {
         page_blocks: draft.page_blocks,
         theme: draft.theme,
@@ -349,6 +364,7 @@ export default async function (req) {
         consent_text: draft.consent_text || "",
         form_version: formVersion,
         sender_verified: senderVerified,
+        nurture_sequence_version_id: nurtureSequenceVersionId,
       };
       const version = await sr.entities.PublishedFunnelVersion.create({
         funnel_id: funnel.id,
