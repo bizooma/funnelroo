@@ -19,6 +19,7 @@ export default function ContactDetail() {
   const [savingNotes, setSavingNotes] = useState(false);
   const [retrying, setRetrying] = useState(null);
   const [marking, setMarking] = useState(null);
+  const [bookings, setBookings] = useState([]);
 
   async function load() {
     if (!id) return;
@@ -26,6 +27,11 @@ export default function ContactDetail() {
     try {
       const res = await base44.functions.invoke("contactsAccess", { action: "get", contact_id: id });
       const contactWs = res.data?.contact?.workspace_id;
+      // Load bookings for this contact
+      try {
+        const bRes = await base44.functions.invoke("bookingAccess", { action: "getContactBookings", contact_id: id });
+        setBookings(bRes.data?.bookings || []);
+      } catch { setBookings([]); }
       // Workspace consistency: if the contact belongs to a different workspace,
       // switch to it so the sidebar and context match. Never mix one contact
       // with another workspace's context.
@@ -257,6 +263,45 @@ export default function ContactDetail() {
             <div className="mt-4 flex items-center gap-2 text-xs text-amber-600 bg-amber-50 rounded-lg p-2.5">
               <Ban className="w-3.5 h-3.5" />
               <span>Suppressed: {data.suppressions.map((s) => s.reason).join(", ")}</span>
+            </div>
+          )}
+        </CardContent></Card>
+
+        {/* Appointments */}
+        <Card className="mt-5"><CardContent className="p-5">
+          <h3 className="font-semibold text-slate-800 mb-3">Appointments ({bookings.length})</h3>
+          {bookings.length === 0 ? <p className="text-sm text-slate-400">No appointments tracked.</p> : (
+            <div className="space-y-2">
+              {bookings.map((b) => (
+                <div key={b.id} className="flex items-center justify-between border border-slate-100 rounded-lg p-3">
+                  <div className="flex items-center gap-3">
+                    <CalendarCheck className={`w-4 h-4 ${b.provider_state === "canceled" ? "text-rose-400" : "text-indigo-500"}`} />
+                    <div>
+                      <div className="text-sm font-medium text-slate-700">{b.event_title || "Appointment"}</div>
+                      <div className="text-xs text-slate-400">
+                        {b.start_time_utc ? new Date(b.start_time_utc).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "Date TBD"}
+                        {b.invitee_timezone ? ` · ${b.invitee_timezone}` : ""}
+                      </div>
+                      {b.funnel_name && <div className="text-xs text-slate-400 mt-0.5">Funnel: {b.funnel_name}</div>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full capitalize ${
+                      b.provider_state === "canceled" ? "bg-rose-100 text-rose-600" :
+                      b.provider_state === "rescheduled" ? "bg-amber-100 text-amber-600" :
+                      "bg-emerald-100 text-emerald-600"
+                    }`}>{b.provider_state}</span>
+                    {b.attendance_outcome !== "unknown" && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full capitalize ${
+                        b.attendance_outcome === "attended" ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"
+                      }`}>{b.attendance_outcome.replace("_", " ")}</span>
+                    )}
+                    {b.provenance === "manual" && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">Manual</span>}
+                    {b.provenance === "legacy_manual" && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-400">Legacy</span>}
+                    {b.nurture_stopped && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-500">Nurture stopped</span>}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </CardContent></Card>

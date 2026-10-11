@@ -1,0 +1,129 @@
+{
+  "name": "CalendarConnection",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "provider": {
+      "type": "string",
+      "default": "calendly"
+    },
+    "provider_user_uri": {
+      "type": "string"
+    },
+    "provider_user_email": {
+      "type": "string"
+    },
+    "provider_user_name": {
+      "type": "string"
+    },
+    "provider_organization_uri": {
+      "type": "string"
+    },
+    "generation": {
+      "type": "number",
+      "default": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "connected",
+        "reconnect_required",
+        "disconnected",
+        "link_only"
+      ],
+      "default": "pending"
+    },
+    "granted_scopes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "webhook_subscription_uri": {
+      "type": "string"
+    },
+    "webhook_subscription_id": {
+      "type": "string"
+    },
+    "webhook_health": {
+      "type": "string",
+      "enum": [
+        "healthy",
+        "missing",
+        "failed",
+        "unknown"
+      ],
+      "default": "unknown"
+    },
+    "last_sync_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_sync_cursor": {
+      "type": "string"
+    },
+    "last_sync_status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "partial",
+        "failed",
+        "never"
+      ]
+    },
+    "last_sync_error": {
+      "type": "string"
+    },
+    "outage_hold": {
+      "type": "boolean",
+      "default": false
+    },
+    "outage_hold_reason": {
+      "type": "string"
+    },
+    "connected_by": {
+      "type": "string"
+    },
+    "connected_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "disconnected_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "plan_supports_webhooks": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "workspace_id",
+    "provider"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

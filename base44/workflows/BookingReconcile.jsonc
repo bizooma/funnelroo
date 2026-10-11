@@ -1,0 +1,48 @@
+{
+  "description": "Reconciles Calendly bookings every 15 minutes \u2014 checks for missed events, recovers from outages, releases holds",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "*/15 * * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "name": "Booking Reconcile",
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "booking_reconcile",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "reconcile": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "bookingReconcile",
+            "payload": {
+              "_system": true,
+              "_workflow": true
+            }
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Reconcile Calendly bookings",
+            "description": "Checks for missed booking events and recovers from outages across all connected workspaces"
+          }
+        }
+      }
+    ]
+  }
+}

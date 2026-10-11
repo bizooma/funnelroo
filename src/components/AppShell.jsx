@@ -4,7 +4,7 @@ import { useWorkspace } from "@/lib/workspaceContext";
 import { useAuth } from "@/lib/AuthContext";
 import { MascotBadge } from "@/components/MascotBadge";
 import {
-  LayoutDashboard, FolderKanban, Users, Settings, Sparkles, ChevronDown, Package,
+  LayoutDashboard, FolderKanban, Users, Settings, Sparkles, ChevronDown, Package, CalendarCheck,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -13,6 +13,7 @@ const nav = [
   { to: "/funnels", label: "Funnels", icon: FolderKanban },
   { to: "/resources", label: "Resources", icon: Package },
   { to: "/contacts", label: "Contacts", icon: Users },
+  { to: "/appointments", label: "Appointments", icon: CalendarCheck },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 

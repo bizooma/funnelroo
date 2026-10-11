@@ -38,7 +38,7 @@ function scrollToCtaTarget() {
   if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function Block({ block, theme, mode, onSubmit, formState }) {
+function Block({ block, theme, mode, onSubmit, formState, bookingUrl }) {
   const p = block.props || {};
   const primary = theme?.primary_color || "#4f46e5";
   switch (block.type) {
@@ -211,7 +211,13 @@ function Block({ block, theme, mode, onSubmit, formState }) {
           </div>
           {p.heading && <h2 className="text-xl font-semibold text-slate-900 mb-1">{p.heading}</h2>}
           {p.calendly_url && mode === "public" ? (
-            <a href={p.calendly_url} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block px-6 py-2.5 rounded-lg text-white text-sm font-medium" style={{ background: primary }}>
+            <a
+              href={bookingUrl || p.calendly_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-block px-6 py-2.5 rounded-lg text-white text-sm font-medium"
+              style={{ background: primary }}
+            >
               Book a time
             </a>
           ) : (
@@ -237,12 +243,12 @@ function Block({ block, theme, mode, onSubmit, formState }) {
   }
 }
 
-/** @param {{ blocks?: any[]; theme?: any; mode?: string; onSubmit?: any; formState?: any }} props */
-export function PageRenderer({ blocks = [], theme, mode = "preview", onSubmit, formState }) {
+/** @param {{ blocks?: any[]; theme?: any; mode?: string; onSubmit?: any; formState?: any; bookingUrl?: string }} props */
+export function PageRenderer({ blocks = [], theme, mode = "preview", onSubmit, formState, bookingUrl }) {
   return (
     <div className="bg-white min-h-full">
       {(blocks || []).map((block) => (
-        <Block key={block.id} block={block} theme={theme} mode={mode} onSubmit={onSubmit} formState={formState} />
+        <Block key={block.id} block={block} theme={theme} mode={mode} onSubmit={onSubmit} formState={formState} bookingUrl={bookingUrl} />
       ))}
     </div>
   );

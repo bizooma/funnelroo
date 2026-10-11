@@ -1,0 +1,81 @@
+{
+  "name": "BookingEvent",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "connection_id": {
+      "type": "string"
+    },
+    "provider_event_id": {
+      "type": "string"
+    },
+    "event_type": {
+      "type": "string"
+    },
+    "provider_event_uri": {
+      "type": "string"
+    },
+    "provider_invitee_uri": {
+      "type": "string"
+    },
+    "payload": {
+      "type": "object"
+    },
+    "signature_valid": {
+      "type": "boolean"
+    },
+    "processing_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "processing",
+        "processed",
+        "failed",
+        "duplicate"
+      ],
+      "default": "pending"
+    },
+    "attempts": {
+      "type": "number",
+      "default": 0
+    },
+    "last_error": {
+      "type": "string"
+    },
+    "processed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "booking_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "provider_event_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

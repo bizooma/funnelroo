@@ -1,0 +1,179 @@
+{
+  "name": "Booking",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "connection_id": {
+      "type": "string"
+    },
+    "event_type_id": {
+      "type": "string"
+    },
+    "provider_event_uri": {
+      "type": "string"
+    },
+    "provider_invitee_uri": {
+      "type": "string"
+    },
+    "provider_event_uuid": {
+      "type": "string"
+    },
+    "provider_invitee_uuid": {
+      "type": "string"
+    },
+    "reschedule_group_id": {
+      "type": "string"
+    },
+    "contact_id": {
+      "type": "string"
+    },
+    "funnel_id": {
+      "type": "string"
+    },
+    "funnel_lead_id": {
+      "type": "string"
+    },
+    "booking_context_id": {
+      "type": "string"
+    },
+    "invitee_email": {
+      "type": "string"
+    },
+    "invitee_email_normalized": {
+      "type": "string"
+    },
+    "invitee_name": {
+      "type": "string"
+    },
+    "invitee_timezone": {
+      "type": "string"
+    },
+    "event_title": {
+      "type": "string"
+    },
+    "start_time_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "end_time_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "original_start_time_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "provider_state": {
+      "type": "string",
+      "enum": [
+        "active",
+        "canceled",
+        "rescheduled"
+      ],
+      "default": "active"
+    },
+    "cancel_reason": {
+      "type": "string"
+    },
+    "canceled_by": {
+      "type": "string"
+    },
+    "canceled_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "cancel_url": {
+      "type": "string"
+    },
+    "reschedule_url": {
+      "type": "string"
+    },
+    "attendance_outcome": {
+      "type": "string",
+      "enum": [
+        "unknown",
+        "attended",
+        "no_show"
+      ],
+      "default": "unknown"
+    },
+    "attendance_set_by": {
+      "type": "string"
+    },
+    "attendance_set_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "provenance": {
+      "type": "string",
+      "enum": [
+        "provider_confirmed",
+        "manual",
+        "legacy_manual"
+      ],
+      "default": "provider_confirmed"
+    },
+    "attribution_status": {
+      "type": "string",
+      "enum": [
+        "reliable",
+        "manual_link",
+        "unattributed"
+      ],
+      "default": "unattributed"
+    },
+    "attribution_label": {
+      "type": "string"
+    },
+    "nurture_stopped": {
+      "type": "boolean",
+      "default": false
+    },
+    "nurture_stop_pending": {
+      "type": "boolean",
+      "default": false
+    },
+    "nurture_stop_applied_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "created_at_provider": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "confirmed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "workspace_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

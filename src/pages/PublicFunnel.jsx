@@ -16,6 +16,7 @@ export default function PublicFunnel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [formState, setFormState] = useState({ submitting: false, error: "", confirmation: null, consentText: "" });
+  const [bookingUrl, setBookingUrl] = useState(null);
   const requestIdRef = useRef(null);
 
   useEffect(() => {
@@ -26,6 +27,19 @@ export default function PublicFunnel() {
         if (res.status === 200) {
           setData(res.data);
           setFormState((s) => ({ ...s, consentText: res.data?.consent_text || "" }));
+          // Create a tracked booking link if the funnel has a booking URL
+          if (res.data?.booking?.url) {
+            try {
+              const linkRes = await base44.functions.invoke("getPublishedFunnel", {
+                action: "createBookingLink",
+                public_id: publicId,
+              });
+              if (linkRes.data?.booking_url) setBookingUrl(linkRes.data.booking_url);
+            } catch {
+              // Fall back to untracked URL if link creation fails
+              setBookingUrl(res.data.booking.url);
+            }
+          }
         } else {
           setError(res.data?.error || "Funnel not available");
         }
@@ -108,7 +122,7 @@ export default function PublicFunnel() {
 
   return (
     <div className="min-h-screen bg-white">
-      <PageRenderer blocks={blocks} theme={theme} mode="public" onSubmit={handleSubmit} formState={formState} />
+      <PageRenderer blocks={blocks} theme={theme} mode="public" onSubmit={handleSubmit} formState={formState} bookingUrl={bookingUrl} />
       <div className="py-6 text-center">
         <div className="inline-flex items-center gap-2 text-xs text-slate-300">
           <MascotBadge size={20} />

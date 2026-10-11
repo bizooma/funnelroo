@@ -79,6 +79,15 @@
         }
       }
     },
+    "booking_event_type_id": {
+      "type": "string"
+    },
+    "booking_cta_label": {
+      "type": "string"
+    },
+    "booking_cta_copy": {
+      "type": "string"
+    },
     "publishing_checks": {
       "type": "object",
       "properties": {

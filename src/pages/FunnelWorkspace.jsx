@@ -6,6 +6,7 @@ import AppShell from "@/components/AppShell";
 import { BlockEditor } from "@/components/funnel/BlockEditor";
 import { FunnelResourceTab } from "@/components/funnel/FunnelResourceTab";
 import { NurtureTab } from "@/components/funnel/NurtureTab";
+import { BookingTab } from "@/components/funnel/BookingTab";
 import { ComingSoon } from "@/components/ComingSoon";
 import { RooPanel } from "@/components/RooPanel";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ const TABS = [
   { id: "plan", label: "Plan" },
   { id: "pages", label: "Pages" },
   { id: "resource", label: "Resource" },
+  { id: "booking", label: "Booking" },
   { id: "followup", label: "Nurture" },
   { id: "traffic", label: "Traffic", soon: "Phase 3" },
   { id: "results", label: "Results", soon: "Phase 3" },
@@ -295,6 +297,9 @@ export default function FunnelWorkspace() {
 
         {tab === "resource" && (
           <FunnelResourceTab funnel={funnel} draft={draft} onChanged={load} />
+        )}
+        {tab === "booking" && (
+          <BookingTab funnel={funnel} draft={draft} onChanged={load} />
         )}
         {tab === "followup" && (
           <NurtureTab funnel={funnel} draft={draft} onChanged={load} />

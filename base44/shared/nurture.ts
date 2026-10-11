@@ -567,6 +567,34 @@ async function processOneMessage(sr, msg, origin, mock, now) {
     return { id: msg.id, skipped: "booking_outcome" };
   }
 
+  // Check for a qualifying confirmed booking (provider-confirmed or manual)
+  // This prevents sending promotional emails after a confirmed appointment.
+  try {
+    const { hasQualifyingBooking, checkBookingConnectionHold } = await import("./booking.ts");
+    const hasBooking = await hasQualifyingBooking(sr, enrollment.workspace_id, contact.id);
+    if (hasBooking) {
+      await sr.entities.NurtureMessage.update(msg.id, {
+        outcome: "suppressed",
+        last_error: "Qualifying booking exists",
+      });
+      await stopEnrollment(sr, enrollment, "booking_confirmed", "system");
+      return { id: msg.id, skipped: "qualifying_booking" };
+    }
+
+    // Check booking connection outage hold (for sequences relying on
+    // automatic booking stops)
+    const hold = await checkBookingConnectionHold(sr, enrollment.workspace_id);
+    if (hold.hold) {
+      await sr.entities.NurtureMessage.update(msg.id, {
+        outcome: "suppressed",
+        last_error: "Booking connection hold: " + hold.reason,
+      });
+      return { id: msg.id, skipped: "booking_connection_hold" };
+    }
+  } catch {
+    // If booking module fails, don't block nurture — fail open
+  }
+
   // Check sender
   const sender = firstRecord(await sr.entities.SenderIdentity.filter({ id: version.sender_id, workspace_id: enrollment.workspace_id }));
   if (!sender) {

@@ -30,6 +30,35 @@
     "last_seen_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "sales_stage": {
+      "type": "string",
+      "enum": [
+        "new",
+        "nurturing",
+        "booked",
+        "won",
+        "lost"
+      ],
+      "default": "new"
+    },
+    "stage_changed_by": {
+      "type": "string"
+    },
+    "stage_changed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "stage_change_reason": {
+      "type": "string"
+    },
+    "origin": {
+      "type": "string",
+      "enum": [
+        "capture",
+        "booking"
+      ],
+      "default": "capture"
     }
   },
   "required": [

@@ -1,0 +1,91 @@
+{
+  "name": "BookingContext",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "token": {
+      "type": "string"
+    },
+    "connection_id": {
+      "type": "string"
+    },
+    "event_type_id": {
+      "type": "string"
+    },
+    "funnel_id": {
+      "type": "string"
+    },
+    "published_version_id": {
+      "type": "string"
+    },
+    "source_channel": {
+      "type": "string",
+      "enum": [
+        "public_page",
+        "nurture_email",
+        "manual",
+        "direct"
+      ]
+    },
+    "contact_id": {
+      "type": "string"
+    },
+    "funnel_lead_id": {
+      "type": "string"
+    },
+    "submission_id": {
+      "type": "string"
+    },
+    "nurture_message_id": {
+      "type": "string"
+    },
+    "enrollment_id": {
+      "type": "string"
+    },
+    "original_campaign": {
+      "type": "string"
+    },
+    "original_source": {
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "consumed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "consumed_booking_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "token"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

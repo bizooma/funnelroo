@@ -14,11 +14,12 @@ import { toast } from "@/components/ui/use-toast";
 import {
   Save, Loader2, Plus, Trash2, Upload, Users, FileText, CreditCard, Plug, Shield, Copy, Check,
 } from "lucide-react";
+import CalendlyTab from "@/components/settings/CalendlyTab";
 
 const TABS = [
   { id: "brief", label: "Business brief", icon: FileText },
   { id: "team", label: "Team", icon: Users },
-  { id: "integrations", label: "Integrations", icon: Plug, soon: true },
+  { id: "integrations", label: "Integrations", icon: Plug },
   { id: "billing", label: "Billing", icon: CreditCard, soon: true },
   { id: "data", label: "Data controls", icon: Shield, soon: true },
 ];
@@ -48,7 +49,7 @@ export default function Settings() {
 
         {tab === "brief" && <BriefTab />}
         {tab === "team" && <TeamTab canAdmin={canAdmin} />}
-        {tab === "integrations" && <Card><CardContent><ComingSoon title="Integrations" description="Email provider, scheduler and other workspace-owned connections with verified sender mapping." phase="Follow-on Phase 2-3" /></CardContent></Card>}
+        {tab === "integrations" && <CalendlyTab />}
         {tab === "billing" && <Card><CardContent><ComingSoon title="Billing" description="Stripe subscriptions — one per workspace — with owner-only controls and server-side entitlements." phase="Follow-on Phase 4" /></CardContent></Card>}
         {tab === "data" && <Card><CardContent><ComingSoon title="Data controls" description="Export and deletion handling, retention policy and audit records." phase="Follow-on Phase 3-4" /></CardContent></Card>}
       </div>

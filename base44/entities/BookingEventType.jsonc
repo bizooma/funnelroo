@@ -1,0 +1,75 @@
+{
+  "name": "BookingEventType",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "connection_id": {
+      "type": "string"
+    },
+    "provider_event_type_uri": {
+      "type": "string"
+    },
+    "provider_event_type_id": {
+      "type": "string"
+    },
+    "provider_event_type_slug": {
+      "type": "string"
+    },
+    "scheduling_url": {
+      "type": "string"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "duration_minutes": {
+      "type": "number"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    },
+    "supported": {
+      "type": "boolean",
+      "default": true
+    },
+    "last_synced_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "connection_id",
+    "provider_event_type_uri"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

@@ -22,6 +22,7 @@ import Onboarding from '@/pages/Onboarding';
 import Contacts from '@/pages/Contacts';
 import ContactDetail from '@/pages/ContactDetail';
 import Resources from '@/pages/Resources';
+import Appointments from '@/pages/Appointments';
 import PublicFunnel from '@/pages/PublicFunnel';
 import ResourceAccess from '@/pages/ResourceAccess';
 import AcceptInvite from '@/pages/AcceptInvite';
@@ -59,6 +60,7 @@ function App() {
                   <Route path="/contacts" element={<Contacts />} />
                   <Route path="/contacts/:id" element={<ContactDetail />} />
                   <Route path="/resources" element={<Resources />} />
+                  <Route path="/appointments" element={<Appointments />} />
                 </Route>
               </Route>
             </Route>

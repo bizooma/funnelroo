@@ -349,11 +349,31 @@ export default async function (req) {
           }
         }
       }
+      // Resolve booking event type for the snapshot
+      let bookingEventTypeSnapshot = null;
+      if (draft.booking_event_type_id) {
+        const et = firstRecord(
+          await sr.entities.BookingEventType.filter({ id: draft.booking_event_type_id, workspace_id: workspaceId })
+        );
+        if (et) {
+          bookingEventTypeSnapshot = {
+            id: et.id,
+            provider_event_type_uri: et.provider_event_type_uri,
+            scheduling_url: et.scheduling_url,
+            display_name: et.display_name,
+            duration_minutes: et.duration_minutes,
+          };
+        }
+      }
       const snapshot = {
         page_blocks: draft.page_blocks,
         theme: draft.theme,
         form_config: draft.form_config,
         booking_config: draft.booking_config,
+        booking_event_type_id: draft.booking_event_type_id || "",
+        booking_event_type: bookingEventTypeSnapshot,
+        booking_cta_label: draft.booking_cta_label || "",
+        booking_cta_copy: draft.booking_cta_copy || "",
         funnel_name: funnel.name,
         funnel_type: funnel.type,
         goal: funnel.goal,
