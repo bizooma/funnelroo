@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, Navigate } from "react-router-dom";
 import { useWorkspace } from "@/lib/workspaceContext";
 import { base44 } from "@/api/base44Client";
 import AppShell from "@/components/AppShell";
@@ -39,18 +39,7 @@ export default function Dashboard() {
   }
 
   if (!current) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6">
-        <div className="text-center max-w-sm">
-          <MascotBadge size={64} className="mx-auto" />
-          <h1 className="text-xl font-semibold text-slate-800 mt-4">Let's set up your first workspace</h1>
-          <p className="text-sm text-slate-500 mt-1.5">Create a workspace to start building funnels.</p>
-          <Button className="mt-5" onClick={() => navigate("/onboarding")}>
-            <Plus className="w-4 h-4 mr-1.5" /> Create workspace
-          </Button>
-        </div>
-      </div>
-    );
+    return <Navigate to="/onboarding" replace />;
   }
 
   const published = funnels.filter((f) => f.state === "published");

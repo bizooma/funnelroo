@@ -1,6 +1,7 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useWorkspace } from "@/lib/workspaceContext";
+import { useAuth } from "@/lib/AuthContext";
 import { MascotBadge } from "@/components/MascotBadge";
 import {
   LayoutDashboard, FolderKanban, Users, Settings, BookOpen, Sparkles, ChevronDown,
@@ -8,7 +9,7 @@ import {
 import { useState } from "react";
 
 const nav = [
-  { to: "/", label: "Overview", icon: LayoutDashboard },
+  { to: "/app", label: "Overview", icon: LayoutDashboard },
   { to: "/funnels", label: "Funnels", icon: FolderKanban },
   { to: "/contacts", label: "Contacts", icon: Users, soon: true },
   { to: "/settings", label: "Settings", icon: Settings },
@@ -17,6 +18,7 @@ const nav = [
 export default function AppShell({ children }) {
   const { current, workspaces, switchWorkspace, profile } = useWorkspace();
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [wsOpen, setWsOpen] = useState(false);
 
   return (
@@ -83,11 +85,17 @@ export default function AppShell({ children }) {
           })}
         </nav>
 
-        <div className="px-4 py-3 border-t border-slate-100">
+        <div className="px-4 py-3 border-t border-slate-100 space-y-3">
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <Sparkles className="w-3.5 h-3.5" />
             <span>Roo is here to help</span>
           </div>
+          <button
+            onClick={() => logout()}
+            className="text-xs text-slate-400 hover:text-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded"
+          >
+            Log out
+          </button>
         </div>
       </aside>
 

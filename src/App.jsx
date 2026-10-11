@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
-import { BrowserRouter as Router, Route, Routes, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Outlet } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider } from '@/lib/AuthContext';
 import ScrollToTop from './components/ScrollToTop';
@@ -21,6 +21,8 @@ import Onboarding from '@/pages/Onboarding';
 import Contacts from '@/pages/Contacts';
 import PublicFunnel from '@/pages/PublicFunnel';
 import AcceptInvite from '@/pages/AcceptInvite';
+import Marketing from '@/pages/Marketing';
+import { LoginRedirect } from '@/components/ProtectedRoute';
 
 function App() {
   return (
@@ -30,6 +32,7 @@ function App() {
           <ScrollToTop />
           <Routes>
             {/* Public routes — no auth required */}
+            <Route path="/" element={<Marketing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -38,9 +41,9 @@ function App() {
             <Route path="/accept-invite" element={<AcceptInvite />} />
 
             {/* Protected routes — require authentication */}
-            <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
+            <Route element={<ProtectedRoute unauthenticatedElement={<LoginRedirect />} />}>
               <Route element={<WorkspaceProvider><Outlet /></WorkspaceProvider>}>
-                <Route path="/" element={<Dashboard />} />
+                <Route path="/app" element={<Dashboard />} />
                 <Route path="/funnels" element={<Funnels />} />
                 <Route path="/funnels/:id" element={<FunnelWorkspace />} />
                 <Route path="/settings" element={<Settings />} />

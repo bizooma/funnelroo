@@ -28,6 +28,13 @@ export default function Funnels() {
   const [name, setName] = useState("");
   const [type, setType] = useState("lead_magnet");
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get("type");
+    if (t === "lead_magnet" || t === "direct_booking" || t === "service_inquiry") setType(t);
+    if (params.get("new") === "1") setOpen(true);
+  }, []);
+
   async function load() {
     if (!current) return;
     const res = await base44.functions.invoke("funnelAccess", { action: "list", workspace_id: current.id });

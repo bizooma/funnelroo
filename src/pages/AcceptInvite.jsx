@@ -44,7 +44,7 @@ export default function AcceptInvite() {
             <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mt-5" />
             <h1 className="text-xl font-semibold text-slate-800 mt-3">You're in!</h1>
             <p className="text-sm text-slate-500 mt-1.5">You've joined the workspace. Let's go to your dashboard.</p>
-            <Button className="mt-5" onClick={() => navigate("/")}>Go to dashboard</Button>
+            <Button className="mt-5" onClick={() => navigate("/app")}>Go to dashboard</Button>
           </>
         )}
         {status === "error" && (
@@ -52,7 +52,7 @@ export default function AcceptInvite() {
             <XCircle className="w-10 h-10 text-rose-500 mx-auto mt-5" />
             <h1 className="text-xl font-semibold text-slate-800 mt-3">Invite not accepted</h1>
             <p className="text-sm text-slate-500 mt-1.5">{msg}</p>
-            <Button variant="outline" className="mt-5" onClick={() => navigate("/")}>Go home</Button>
+            <Button variant="outline" className="mt-5" onClick={() => navigate("/app")}>Go home</Button>
           </>
         )}
       </div>

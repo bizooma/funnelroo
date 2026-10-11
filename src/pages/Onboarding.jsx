@@ -49,7 +49,7 @@ export default function Onboarding() {
         onboarding_complete: true,
       });
       await refresh();
-      navigate("/");
+      navigate("/app");
     } catch (e) {
       setError(e.response?.data?.error || e.message || "Could not save. Please try again.");
       setSaving(false);

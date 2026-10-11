@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
@@ -34,4 +34,13 @@ export default function ProtectedRoute({ fallback = <DefaultFallback />, unauthe
   }
 
   return <Outlet />;
+}
+
+// Sends an unauthenticated visitor to login while preserving the protected
+// destination they were trying to reach (e.g. an editor link) through the
+// returnTo query param, which the auth pages resume after sign-in.
+export function LoginRedirect() {
+  const loc = useLocation();
+  const returnTo = loc.pathname + loc.search;
+  return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
 }

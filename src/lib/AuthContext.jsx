@@ -105,10 +105,11 @@ export const AuthProvider = ({ children }) => {
   const logout = (shouldRedirect = true) => {
     setUser(null);
     setIsAuthenticated(false);
-    
+    try { localStorage.removeItem("fr_current_ws"); } catch {}
+
     if (shouldRedirect) {
-      // Use the SDK's logout method which handles token cleanup and redirect
-      base44.auth.logout(window.location.href);
+      // Return to the public marketing homepage and clear workspace UI state.
+      base44.auth.logout("/");
     } else {
       // Just remove the token without redirect
       base44.auth.logout();
