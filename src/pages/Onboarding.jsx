@@ -48,9 +48,6 @@ export default function Onboarding() {
         approved_facts: facts,
         onboarding_complete: true,
       });
-      await base44.asServiceRole
-        ? null
-        : null;
       await refresh();
       navigate("/");
     } catch (e) {
