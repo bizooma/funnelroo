@@ -1,5 +1,6 @@
-import { MascotBadge } from "@/components/MascotBadge";
 import { Reveal } from "./Reveal";
+
+const ROO_VIDEO_URL = "https://media.base44.com/videos/public/6acba9de240facdd95f5665d/76dcc26fe_gemini_generated_video_0a0cda66.mp4";
 
 export default function MeetRoo() {
   return (
@@ -17,9 +18,17 @@ export default function MeetRoo() {
           </p>
         </Reveal>
         <Reveal delay={0.15} className="flex justify-center">
-          <div className="relative">
-            <div className="w-48 h-48 rounded-full bg-gradient-to-br from-indigo-100 to-violet-100 flex items-center justify-center shadow-inner">
-              <MascotBadge size={120} />
+          <div className="relative max-w-sm w-full">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-xl bg-white">
+              <video
+                src={ROO_VIDEO_URL}
+                className="w-full h-auto block"
+                autoPlay
+                muted
+                loop
+                playsInline
+                controls={false}
+              />
             </div>
             <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-white rounded-full border border-slate-200 shadow-md px-4 py-1.5 text-sm font-medium text-slate-700 whitespace-nowrap">
               Hi, I'm Roo 👋
