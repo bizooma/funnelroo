@@ -102,8 +102,9 @@ export async function processDeliveryJob(base44, job, origin) {
   const fresh = firstRecord(await sr.entities.DeliveryJob.filter({ id: job.id }));
   if (fresh) job = fresh;
 
-  // Terminal states — skip (provider_accepted is terminal: provider took the request)
-  if (["provider_accepted", "delivered", "suppressed"].includes(job.state)) return job;
+  // Terminal/active states — skip. "processing" means another processor has
+  // claimed it; "provider_accepted" means the provider took the request.
+  if (["processing", "provider_accepted", "delivered", "suppressed"].includes(job.state)) return job;
 
   // Enforce attempts independently of state (never retry exhausted jobs)
   if ((job.attempts || 0) >= MAX_ATTEMPTS) {
@@ -149,11 +150,12 @@ export async function processDeliveryJob(base44, job, origin) {
   const subject = `Your ${resourceTitle} from ${businessName || "FunnelRoo"}`;
   const html = brandedEmail({ resourceTitle, businessName, recipientName: job.recipient_name, accessUrl });
 
-  // Atomically claim: increment attempts only if state is still pending/failed.
-  // This prevents two concurrent processors from both sending.
+  // Atomically claim: set state to "processing" only if still pending/failed.
+  // This prevents two concurrent processors from both sending — the first to
+  // claim wins; the second's updateMany doesn't match (state is now "processing").
   const claim = await sr.entities.DeliveryJob.updateMany(
     { id: job.id, state: { $in: ["pending", "failed"] } },
-    { $inc: { attempts: 1 } }
+    { $set: { state: "processing" }, $inc: { attempts: 1 } }
   );
   if (!claim.updated) {
     // Someone else claimed it, or it's no longer in a processable state
