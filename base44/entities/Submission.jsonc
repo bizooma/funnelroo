@@ -1,0 +1,95 @@
+{
+  "name": "Submission",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "funnel_id": {
+      "type": "string"
+    },
+    "contact_id": {
+      "type": "string"
+    },
+    "funnel_lead_id": {
+      "type": "string"
+    },
+    "published_version_id": {
+      "type": "string"
+    },
+    "form_version": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "answers": {
+      "type": "object"
+    },
+    "accepted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "processing_state": {
+      "type": "string",
+      "enum": [
+        "accepted",
+        "fulfilled",
+        "failed"
+      ],
+      "default": "accepted"
+    },
+    "source": {
+      "type": "string"
+    },
+    "campaign": {
+      "type": "string"
+    },
+    "resource_version_id": {
+      "type": "string"
+    },
+    "consent_text": {
+      "type": "string"
+    },
+    "consent_version": {
+      "type": "string"
+    },
+    "consent_choice": {
+      "type": "string",
+      "enum": [
+        "opt_in",
+        "opt_out",
+        "not_offered"
+      ],
+      "default": "not_offered"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "funnel_id",
+    "contact_id",
+    "request_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

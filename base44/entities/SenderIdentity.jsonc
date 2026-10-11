@@ -1,0 +1,68 @@
+{
+  "name": "SenderIdentity",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "from_name": {
+      "type": "string"
+    },
+    "reply_to": {
+      "type": "string"
+    },
+    "provider": {
+      "type": "string",
+      "default": "platform_sendemail"
+    },
+    "verified": {
+      "type": "boolean",
+      "default": false
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "unverified",
+        "verified",
+        "failed"
+      ],
+      "default": "unverified"
+    },
+    "last_test_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_test_result": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "email"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

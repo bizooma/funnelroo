@@ -180,12 +180,39 @@ export default async function (req) {
       if (!draft) return err(400, "Nothing to publish — save a draft first");
       // template-specific publishing checks
       const checks = draft.publishing_checks || {};
+      const blocks = draft.page_blocks || [];
+      const hasForm = blocks.some((b) => b.type === "form");
       if (funnel.type === "lead_magnet") {
-        if (!checks.has_form) return err(400, "Lead magnet funnels require a lead form before publishing");
-        if (!checks.has_resource) return err(400, "Lead magnet funnels require a resource before publishing");
+        if (!hasForm) return err(400, "Lead magnet funnels require a lead form before publishing");
+        if (!draft.resource_version_id) return err(400, "Attach an approved resource version before publishing");
+      }
+      if (funnel.type === "service_inquiry" && !hasForm) {
+        return err(400, "Service inquiry funnels require a lead form before publishing");
       }
       if (funnel.type === "direct_booking" && !checks.has_booking) {
         return err(400, "Direct booking funnels require a booking connection before publishing");
+      }
+      // email fulfillment requires a verified sender
+      const deliveryMode = draft.delivery_mode || "immediate_only";
+      let senderVerified = false;
+      if (deliveryMode === "immediate_plus_email") {
+        if (!draft.sender_id) return err(400, "Email delivery is enabled but no sender is selected");
+        const sender = firstRecord(await sr.entities.SenderIdentity.filter({ id: draft.sender_id, workspace_id: workspaceId }));
+        if (!sender) return err(400, "Selected sender no longer exists");
+        if (!sender.verified) return err(400, "Verify your sender before publishing email delivery");
+        senderVerified = true;
+      }
+      // compute form_version + resource_title for the snapshot
+      const formBlock = blocks.find((b) => b.type === "form");
+      const formFields = formBlock?.props?.fields || [];
+      const formVersion = JSON.stringify(formFields.map((f) => ({ n: f.name, l: f.label, t: f.type, r: !!f.required })));
+      let resourceTitle = "";
+      if (draft.resource_version_id) {
+        const rv = firstRecord(await sr.entities.ResourceVersion.filter({ id: draft.resource_version_id, workspace_id: workspaceId }));
+        if (rv) {
+          const resource = firstRecord(await sr.entities.Resource.filter({ id: rv.resource_id }));
+          resourceTitle = resource?.title || "";
+        }
       }
       // count existing versions
       const versions = asArray(
@@ -206,6 +233,13 @@ export default async function (req) {
         funnel_name: funnel.name,
         funnel_type: funnel.type,
         goal: funnel.goal,
+        resource_version_id: draft.resource_version_id || "",
+        resource_title: resourceTitle,
+        delivery_mode: deliveryMode,
+        sender_id: draft.sender_id || "",
+        consent_text: draft.consent_text || "",
+        form_version: formVersion,
+        sender_verified: senderVerified,
       };
       const version = await sr.entities.PublishedFunnelVersion.create({
         funnel_id: funnel.id,

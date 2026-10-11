@@ -1,0 +1,63 @@
+{
+  "name": "ConsentRecord",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "contact_id": {
+      "type": "string"
+    },
+    "submission_id": {
+      "type": "string"
+    },
+    "purpose": {
+      "type": "string",
+      "default": "promotional"
+    },
+    "text": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "choice": {
+      "type": "string",
+      "enum": [
+        "opt_in",
+        "opt_out"
+      ],
+      "default": "opt_out"
+    },
+    "source": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "contact_id",
+    "choice"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

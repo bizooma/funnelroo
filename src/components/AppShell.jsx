@@ -4,14 +4,15 @@ import { useWorkspace } from "@/lib/workspaceContext";
 import { useAuth } from "@/lib/AuthContext";
 import { MascotBadge } from "@/components/MascotBadge";
 import {
-  LayoutDashboard, FolderKanban, Users, Settings, BookOpen, Sparkles, ChevronDown,
+  LayoutDashboard, FolderKanban, Users, Settings, BookOpen, Sparkles, ChevronDown, Package,
 } from "lucide-react";
 import { useState } from "react";
 
 const nav = [
   { to: "/app", label: "Overview", icon: LayoutDashboard },
   { to: "/funnels", label: "Funnels", icon: FolderKanban },
-  { to: "/contacts", label: "Contacts", icon: Users, soon: true },
+  { to: "/resources", label: "Resources", icon: Package },
+  { to: "/contacts", label: "Contacts", icon: Users },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 

@@ -42,6 +42,26 @@
         }
       }
     },
+    "resource_version_id": {
+      "type": "string"
+    },
+    "delivery_mode": {
+      "type": "string",
+      "enum": [
+        "immediate_only",
+        "immediate_plus_email"
+      ],
+      "default": "immediate_only"
+    },
+    "sender_id": {
+      "type": "string"
+    },
+    "consent_text": {
+      "type": "string"
+    },
+    "form_version": {
+      "type": "string"
+    },
     "resource_id": {
       "type": "string"
     },

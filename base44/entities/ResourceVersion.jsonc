@@ -1,0 +1,73 @@
+{
+  "name": "ResourceVersion",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "resource_id": {
+      "type": "string"
+    },
+    "version_number": {
+      "type": "number"
+    },
+    "delivery_type": {
+      "type": "string",
+      "enum": [
+        "file",
+        "external"
+      ],
+      "default": "file"
+    },
+    "file_uri": {
+      "type": "string"
+    },
+    "external_url": {
+      "type": "string"
+    },
+    "filename": {
+      "type": "string"
+    },
+    "content_type": {
+      "type": "string"
+    },
+    "size_bytes": {
+      "type": "number"
+    },
+    "created_by": {
+      "type": "string"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "workspace_id",
+    "resource_id",
+    "version_number",
+    "delivery_type"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

@@ -24,7 +24,13 @@ export default async function (req) {
     );
     if (!version) return err(404, "No active published version");
 
-    // Return only the public snapshot + minimal funnel metadata
+    // Return only the public snapshot + minimal funnel metadata + the
+    // form version the public form must echo back for stale-version checks.
+    const snapshot = version.snapshot || {};
+    const blocks = snapshot.page_blocks || [];
+    const formBlock = blocks.find((b) => b.type === "form");
+    const formFields = formBlock?.props?.fields || [];
+    const formVersion = JSON.stringify(formFields.map((f) => ({ n: f.name, l: f.label, t: f.type, r: !!f.required })));
     return ok({
       funnel: {
         name: funnel.name,
@@ -35,8 +41,14 @@ export default async function (req) {
       version: {
         version_number: version.version_number,
         published_at: version.published_at,
-        snapshot: version.snapshot,
+        snapshot,
       },
+      form_version: formVersion,
+      delivery_mode: snapshot.delivery_mode || "immediate_only",
+      consent_text: snapshot.consent_text || "",
+      resource: snapshot.resource_version_id
+        ? { title: snapshot.resource_title || "", delivery_mode: snapshot.delivery_mode || "immediate_only" }
+        : null,
     });
   } catch (e) {
     return err(500, e.message);

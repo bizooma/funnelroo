@@ -1,24 +1,30 @@
-import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import React, { useEffect, useRef, useState } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { PageRenderer } from "@/components/funnel/PageRenderer";
 import { MascotBadge } from "@/components/MascotBadge";
-import { Loader2, FileQuestion } from "lucide-react";
+import { Loader2, FileQuestion, RefreshCw } from "lucide-react";
 
-// Anonymous public funnel page. No auth required.
-// Reads only the approved published snapshot — never drafts or contacts.
+// Anonymous public funnel page. No auth required. Reads only the approved
+// published snapshot, submits the form to the capture backend, and shows a
+// branded confirmation with immediate resource access.
 export default function PublicFunnel() {
   const { slug } = useParams();
+  const [searchParams] = useSearchParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [formState, setFormState] = useState({ submitting: false, error: "", confirmation: null, consentText: "" });
+  const requestIdRef = useRef(null);
 
   useEffect(() => {
     (async () => {
+      setLoading(true);
       try {
         const res = await base44.functions.invoke("getPublishedFunnel", { slug });
         if (res.status === 200) {
           setData(res.data);
+          setFormState((s) => ({ ...s, consentText: res.data?.consent_text || "" }));
         } else {
           setError(res.data?.error || "Funnel not available");
         }
@@ -29,6 +35,39 @@ export default function PublicFunnel() {
       }
     })();
   }, [slug]);
+
+  async function handleSubmit(answers, consentChoice, honeypot) {
+    // generate (or reuse) a request id for this attempt cycle — retries reuse it
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID();
+    const request_id = requestIdRef.current;
+    setFormState((s) => ({ ...s, submitting: true, error: "" }));
+    try {
+      const res = await base44.functions.invoke("captureSubmission", {
+        slug,
+        request_id,
+        form_version: data?.form_version,
+        answers,
+        consent_choice: consentChoice,
+        source: searchParams.get("utm_source") || "",
+        campaign: searchParams.get("utm_campaign") || "",
+        website: honeypot,
+      });
+      if (res.status === 200) {
+        setFormState({ submitting: false, error: "", confirmation: res.data?.confirmation, consentText: data?.consent_text || "" });
+        requestIdRef.current = null; // a later intentional resubmit gets a fresh id
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else if (res.status === 409) {
+        // stale form version — ask the visitor to reload
+        setFormState((s) => ({ ...s, submitting: false, error: "This page has been updated. Please reload and resubmit the current form." }));
+        requestIdRef.current = null;
+      } else {
+        setFormState((s) => ({ ...s, submitting: false, error: res.data?.error || "Submission failed. Please try again." }));
+        // keep request_id for retry on recoverable failure
+      }
+    } catch (e) {
+      setFormState((s) => ({ ...s, submitting: false, error: e.response?.data?.error || "Network error. Please try again." }));
+    }
+  }
 
   if (loading) {
     return (
@@ -60,7 +99,7 @@ export default function PublicFunnel() {
 
   return (
     <div className="min-h-screen bg-white">
-      <PageRenderer blocks={blocks} theme={theme} mode="public" />
+      <PageRenderer blocks={blocks} theme={theme} mode="public" onSubmit={handleSubmit} formState={formState} />
       <div className="py-6 text-center">
         <div className="inline-flex items-center gap-2 text-xs text-slate-300">
           <MascotBadge size={20} />

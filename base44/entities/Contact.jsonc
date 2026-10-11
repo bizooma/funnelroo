@@ -20,6 +20,12 @@
     "display_name": {
       "type": "string"
     },
+    "company": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
     "source": {
       "type": "string"
     },
@@ -30,6 +36,9 @@
       }
     },
     "first_known_source": {
+      "type": "string"
+    },
+    "notes": {
       "type": "string"
     }
   },

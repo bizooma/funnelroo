@@ -1,0 +1,62 @@
+{
+  "name": "FunnelLead",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "funnel_id": {
+      "type": "string"
+    },
+    "contact_id": {
+      "type": "string"
+    },
+    "first_submission_id": {
+      "type": "string"
+    },
+    "latest_submission_id": {
+      "type": "string"
+    },
+    "acquisition_source": {
+      "type": "string"
+    },
+    "acquisition_campaign": {
+      "type": "string"
+    },
+    "first_seen_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_seen_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "funnel_id",
+    "contact_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

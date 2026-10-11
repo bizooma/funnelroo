@@ -1,0 +1,86 @@
+{
+  "name": "DeliveryJob",
+  "type": "object",
+  "properties": {
+    "purpose": {
+      "type": "string",
+      "default": "requested_resource"
+    },
+    "workspace_id": {
+      "type": "string"
+    },
+    "submission_id": {
+      "type": "string"
+    },
+    "resource_grant_id": {
+      "type": "string"
+    },
+    "resource_version_id": {
+      "type": "string"
+    },
+    "recipient_email": {
+      "type": "string"
+    },
+    "recipient_name": {
+      "type": "string"
+    },
+    "sender_id": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "provider_accepted",
+        "delivered",
+        "failed",
+        "suppressed"
+      ],
+      "default": "pending"
+    },
+    "attempts": {
+      "type": "number",
+      "default": 0
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "provider_message_id": {
+      "type": "string"
+    },
+    "last_error": {
+      "type": "string"
+    },
+    "access_url": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "submission_id",
+    "recipient_email",
+    "idempotency_key"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

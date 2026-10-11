@@ -1,13 +1,14 @@
 import React from "react";
 import { Image } from "@/components/ui/image";
 import { Calendar, FileText, PlayCircle, HelpCircle, Quote } from "lucide-react";
+import { PublicForm } from "./PublicForm";
 
 // Shared section-based page renderer. Renders the same structured page_blocks
 // in the editor preview and on the anonymous public funnel page.
 // mode: "preview" (editor) | "public" (live). In public mode the form block is
 // display-only (capture arrives in a later phase).
 
-function Block({ block, theme, mode }) {
+function Block({ block, theme, mode, onSubmit, formState }) {
   const p = block.props || {};
   const primary = theme?.primary_color || "#4f46e5";
   switch (block.type) {
@@ -104,6 +105,20 @@ function Block({ block, theme, mode }) {
         </section>
       );
     case "form":
+      if (mode === "public" && onSubmit) {
+        return (
+          <section className="px-6 py-10 max-w-md mx-auto">
+            <PublicForm
+              heading={p.heading}
+              fields={p.fields || []}
+              submitLabel={p.submit_label}
+              primary={primary}
+              onSubmit={onSubmit}
+              formState={formState}
+            />
+          </section>
+        );
+      }
       return (
         <section className="px-6 py-10 max-w-md mx-auto">
           <div className="bg-white rounded-2xl border border-slate-200 p-7 shadow-sm">
@@ -123,9 +138,6 @@ function Block({ block, theme, mode }) {
             <button disabled className="mt-4 w-full py-2.5 rounded-lg text-white text-sm font-medium" style={{ background: primary }}>
               {p.submit_label || "Submit"}
             </button>
-            {mode === "public" && (
-              <p className="mt-3 text-[11px] text-center text-slate-400">Lead capture arrives with the next release.</p>
-            )}
           </div>
         </section>
       );
@@ -178,11 +190,11 @@ function Block({ block, theme, mode }) {
   }
 }
 
-export function PageRenderer({ blocks = [], theme, mode = "preview" }) {
+export function PageRenderer({ blocks = [], theme, mode = "preview", onSubmit, formState }) {
   return (
     <div className="bg-white min-h-full">
       {(blocks || []).map((block) => (
-        <Block key={block.id} block={block} theme={theme} mode={mode} />
+        <Block key={block.id} block={block} theme={theme} mode={mode} onSubmit={onSubmit} formState={formState} />
       ))}
     </div>
   );
