@@ -6,12 +6,16 @@ import { cn } from "@/lib/utils"
 
 const Accordion = AccordionPrimitive.Root
 
-const AccordionItem = React.forwardRef(({ className, ...props }, ref) => (
-  <AccordionPrimitive.Item ref={ref} className={cn("border-b", className)} {...props} />
+const AccordionItem = React.forwardRef(
+  /** @param {React.HTMLAttributes<HTMLDivElement> & { value: string }} props */
+  ({ className, ...props }, ref) => (
+    <AccordionPrimitive.Item ref={ref} className={cn("border-b", className)} {...props} />
 ))
 AccordionItem.displayName = "AccordionItem"
 
-const AccordionTrigger = React.forwardRef(({ className, children, ...props }, ref) => (
+const AccordionTrigger = React.forwardRef(
+  /** @param {React.HTMLAttributes<HTMLButtonElement>} props */
+  ({ className, children, ...props }, ref) => (
   <AccordionPrimitive.Header className="flex">
     <AccordionPrimitive.Trigger
       ref={ref}
@@ -28,7 +32,9 @@ const AccordionTrigger = React.forwardRef(({ className, children, ...props }, re
 ))
 AccordionTrigger.displayName = AccordionPrimitive.Trigger.displayName
 
-const AccordionContent = React.forwardRef(({ className, children, ...props }, ref) => (
+const AccordionContent = React.forwardRef(
+  /** @param {React.HTMLAttributes<HTMLDivElement>} props */
+  ({ className, children, ...props }, ref) => (
   <AccordionPrimitive.Content
     ref={ref}
     className="overflow-hidden text-sm data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"

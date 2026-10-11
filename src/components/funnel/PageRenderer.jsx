@@ -237,6 +237,7 @@ function Block({ block, theme, mode, onSubmit, formState }) {
   }
 }
 
+/** @param {{ blocks?: any[]; theme?: any; mode?: string; onSubmit?: any; formState?: any }} props */
 export function PageRenderer({ blocks = [], theme, mode = "preview", onSubmit, formState }) {
   return (
     <div className="bg-white min-h-full">

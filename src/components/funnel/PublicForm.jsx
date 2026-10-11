@@ -6,7 +6,7 @@ import { Confirmation } from "./Confirmation";
 // client-side validation, a honeypot, and renders the confirmation view once
 // accepted. Used by PageRenderer in public mode.
 export function PublicForm({ heading, fields = [], submitLabel, primary, onSubmit, formState }) {
-  const [values, setValues] = useState({});
+  const [values, setValues] = useState(/** @type {Record<string, string>} */({}));
   const [honeypot, setHoneypot] = useState("");
   const [localError, setLocalError] = useState("");
   const [consent, setConsent] = useState(false);

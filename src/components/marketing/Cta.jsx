@@ -5,6 +5,7 @@ import { APP_ENTRY, REGISTER_URL } from "./constants";
 
 // Primary account action. Signed-out visitors get "Get Started" (register);
 // signed-in visitors get "Open App" (the authenticated entry).
+/** @param {{ className?: string; size?: "default" | "sm" | "lg" | "icon"; label?: string }} props */
 export function PrimaryCta({ className = "", size = "default", label }) {
   const { isAuthenticated, authChecked } = useAuth();
   if (authChecked && isAuthenticated) {

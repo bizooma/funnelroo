@@ -4,6 +4,18 @@ import { buildSrcSet, buildTransformUrl, splitImageProps } from "./image-helpers
 import { useResponsiveImage } from "./use-responsive-image"
 
 export const ResponsiveImage = React.forwardRef(
+  /**
+   * @param {React.HTMLAttributes<HTMLSpanElement> & {
+   *   src: string;
+   *   parsed: any;
+   *   fittingType?: string;
+   *   focalPoint?: { x: number; y: number };
+   *   quality?: number;
+   *   aspectRatio?: string;
+   *   onLoad?: (e: any) => void;
+   *   onSourceChange?: (value: any, className?: string) => void;
+   * }} props
+   */
   ({ src, parsed, fittingType, focalPoint, quality, className, style, aspectRatio, onLoad, onSourceChange, ...props }, ref) => {
     const { wrapperRef, imgRef, loaded, options, handleLoad } = useResponsiveImage(
       { parsed, fittingType, focalPoint, quality, className, onLoad, onSourceChange }, ref

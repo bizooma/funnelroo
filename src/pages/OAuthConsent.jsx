@@ -104,6 +104,7 @@ export default function OAuthConsent() {
         // bearer token) so the server can list the granted tools for a
         // signed-in user — the same auth the approve/deny call sends; without
         // it the display request is anonymous and shows no tools.
+        /** @type {Record<string, string>} */
         const infoHeaders = {};
         if (appParams.token) infoHeaders.Authorization = "Bearer " + appParams.token;
         const res = await fetch(
@@ -153,6 +154,7 @@ export default function OAuthConsent() {
     setSubmitting(true);
     setError("");
     try {
+      /** @type {Record<string, string>} */
       const headers = { "Content-Type": "application/json" };
       // Cookie-backed sessions carry no token; sending "Bearer null" would
       // shadow the valid cookie, so add the header only when a token exists.

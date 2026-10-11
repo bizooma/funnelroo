@@ -5,6 +5,7 @@ import { MascotBadge } from "@/components/MascotBadge";
 import { useWorkspace } from "@/lib/workspaceContext";
 
 // Contextual Roo assistant panel. Drafts content from the approved brief.
+/** @param {{ title?: string; context?: any; onApply?: (d: any) => void; action: string; extraPayload?: any }} props */
 export function RooPanel({ title = "Ask Roo", context, onApply, action, extraPayload }) {
   const { current } = useWorkspace();
   const [open, setOpen] = useState(false);

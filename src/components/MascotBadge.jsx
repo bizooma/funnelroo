@@ -2,6 +2,7 @@ import React from "react";
 
 // Shows the Roo mascot if uploaded, otherwise a friendly text placeholder.
 // We never invent a replacement mascot — the user uploads the approved image.
+/** @param {{ size?: number; src?: string; className?: string }} props */
 export function MascotBadge({ size = 40, src, className = "" }) {
   if (src) {
     return (

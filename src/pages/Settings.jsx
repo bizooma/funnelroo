@@ -89,7 +89,7 @@ function BriefTab() {
   async function uploadMascot(file) {
     setUploading(true);
     try {
-      const { file_url } = await base44.integrations.Core.UploadPublicFile({ file });
+      const { file_url } = await /** @type {any} */(base44.integrations.Core).UploadPublicFile({ file });
       await base44.functions.invoke("workspaceAccess", { action: "updateWorkspace", workspace_id: current.id, mascot_image_url: file_url });
       await refresh();
       toast({ title: "Mascot uploaded" });

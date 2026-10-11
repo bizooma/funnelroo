@@ -256,6 +256,7 @@ function Field({ label, children }) {
   );
 }
 
+/** @param {{ label: string; items: any[]; fields: any[]; heading?: any; onHeading?: (v: any) => void; headingLabel?: string; onChange: (items: any[]) => void; noHeading?: boolean }} props */
 function ListEditor({ label, items, fields, heading, onHeading, headingLabel, onChange, noHeading }) {
   function update(i, k, v) {
     const next = items.map((it, idx) => (idx === i ? { ...it, [k]: v } : it));
