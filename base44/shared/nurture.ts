@@ -191,11 +191,12 @@ function sendViaMock() {
   };
 }
 
-export async function sendNurtureEmail(payload) {
-  if (isProviderConfigured()) {
-    return await sendViaResend(payload);
+export async function sendNurtureEmail(payload, opts) {
+  // opts.mock forces the mock provider even when Resend is configured (tests).
+  if (opts?.mock || !isProviderConfigured()) {
+    return sendViaMock();
   }
-  return sendViaMock();
+  return await sendViaResend(payload);
 }
 
 // --- Email rendering ---
@@ -304,14 +305,27 @@ export function computeIdempotencyKey(messageIdentity) {
   return "nurture_" + Buffer.from(messageIdentity).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 40);
 }
 
+// Check if a string looks like a valid Base44 record ID (24-char hex).
+// Prevents "Invalid query: id is not a valid record ID" errors when
+// approved_context fields are missing or set to placeholder values.
+function isValidRecordId(id) {
+  return typeof id === "string" && /^[a-f0-9]{24}$/i.test(id);
+}
+
 // --- Build merge context for a contact ---
 export async function buildMergeContext(sr, workspaceId, contact, sequenceVersion) {
   const profile = firstRecord(await sr.entities.BusinessProfile.filter({ workspace_id: workspaceId }));
-  const funnel = firstRecord(await sr.entities.Funnel.filter({ id: sequenceVersion?.approved_context?.funnel_id || "" }));
-  const offer = firstRecord(await sr.entities.Offer.filter({ id: sequenceVersion?.approved_context?.offer_id || "" }));
+  const funnelId = sequenceVersion?.approved_context?.funnel_id;
+  const funnel = funnelId && isValidRecordId(funnelId)
+    ? firstRecord(await sr.entities.Funnel.filter({ id: funnelId }))
+    : null;
+  const offerId = sequenceVersion?.approved_context?.offer_id;
+  const offer = offerId && isValidRecordId(offerId)
+    ? firstRecord(await sr.entities.Offer.filter({ id: offerId }))
+    : null;
   let resourceTitle = "";
   const rvId = sequenceVersion?.approved_context?.resource_version_id;
-  if (rvId) {
+  if (rvId && isValidRecordId(rvId)) {
     const rv = firstRecord(await sr.entities.ResourceVersion.filter({ id: rvId }));
     if (rv) {
       const resource = firstRecord(await sr.entities.Resource.filter({ id: rv.resource_id }));
@@ -607,7 +621,7 @@ async function processOneMessage(sr, msg, origin, mock, now) {
       text: msg.body_text,
       headers: emailHeaders,
       idempotencyKey: msg.idempotency_key,
-    });
+    }, { mock });
 
     const messageId = result.messageId || "";
     const sentAt = new Date().toISOString();
@@ -857,7 +871,6 @@ export async function processProviderEvent(sr, event) {
     await sr.entities.NurtureMessage.update(msg.id, { outcome: "delivered" });
   } else if (eventType === "bounced" || eventType === "complaint") {
     // Hard bounce or complaint → suppress + stop enrollments
-    const contact = firstRecord(await sr.entities.Contact.filter({ id: msg.recipient_email ? null : null }));
     // Find contact by the message's enrollment
     const enrollment = firstRecord(await sr.entities.NurtureEnrollment.filter({ id: msg.enrollment_id }));
     if (enrollment) {
