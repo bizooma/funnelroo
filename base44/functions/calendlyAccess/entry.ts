@@ -11,6 +11,7 @@ import {
   isCalendlyConfigured,
   isCalendlyWebhookSigningConfigured,
   normalizeEmail,
+  getConnectionAccessToken,
 } from "../../shared/booking.ts";
 import { secrets } from "base44:runtime";
 
@@ -506,66 +507,12 @@ async function handleCallback(base44, sr, body, req) {
   });
 }
 
-// --- Persistent token store (CalendarToken entity, service-role only) ---
-// Reads and writes go through sr.entities.CalendarToken, whose RLS denies all
-// client access. Tokens never leave the server.
-
-async function getAccessToken(sr, connectionId) {
-  const tokenRec = firstRecord(
-    await sr.entities.CalendarToken.filter({ connection_id: connectionId })
-  );
-  if (!tokenRec) return null;
-
-  const expiresAt = new Date(tokenRec.expires_at).getTime();
-  // Refresh if expires within 5 minutes
-  if (expiresAt < Date.now() + 5 * 60 * 1000) {
-    try {
-      const refreshed = await refreshCalendlyToken(sr, connectionId, tokenRec.refresh_token);
-      return refreshed.access_token;
-    } catch {
-      return null;
-    }
-  }
-  return tokenRec.access_token;
-}
-
-async function refreshCalendlyToken(sr, connectionId, refreshToken) {
-  const clientId = secrets.get("CALENDLY_CLIENT_ID");
-  const clientSecret = secrets.get("CALENDLY_CLIENT_SECRET");
-
-  const res = await fetch(CALENDLY_TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: clientId,
-      client_secret: clientSecret,
-    }).toString(),
-    signal: AbortSignal.timeout(15000),
-  });
-
-  if (!res.ok) throw new Error(`Refresh failed: ${res.status}`);
-  const tokens = await res.json();
-  const expiresAt = new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString();
-
-  // Persist refreshed tokens
-  const tokenRec = firstRecord(
-    await sr.entities.CalendarToken.filter({ connection_id: connectionId })
-  );
-  if (tokenRec) {
-    await sr.entities.CalendarToken.update(tokenRec.id, {
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
-      expires_at: expiresAt,
-    });
-  }
-  return tokens;
-}
-
 // --- Calendly API helpers ---
+// Token management is handled by the shared getConnectionAccessToken() in
+// shared/booking.ts, which uses the server-only CalendarToken entity with
+// concurrency-safe refresh and automatic reconnect_required marking.
 async function fetchCalendlyEventTypes(sr, connection) {
-  const token = await getAccessToken(sr, connection.id);
+  const token = await getConnectionAccessToken(sr, connection.id);
   if (!token) throw new Error("No valid access token — reconnect required");
 
   const userUri = connection.provider_user_uri;
@@ -622,7 +569,7 @@ async function createCalendlyWebhook(sr, connection, accessToken) {
 }
 
 async function deleteCalendlyWebhook(sr, connection) {
-  const token = await getAccessToken(sr, connection.id);
+  const token = await getConnectionAccessToken(sr, connection.id);
   if (!token || !connection.webhook_subscription_uri) return;
   await fetch(connection.webhook_subscription_uri, {
     method: "DELETE",

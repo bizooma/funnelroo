@@ -9,8 +9,10 @@ import {
 } from "../../shared/auth.ts";
 import {
   parseCalendlyEvent,
+  enrichWithEventDetails,
   verifyCalendlySignature,
   isCalendlyWebhookSigningConfigured,
+  getConnectionAccessToken,
   resolveBookingContext,
   determineAttribution,
   matchContact,
@@ -54,10 +56,11 @@ export default async function (req) {
       return err(503, "Webhook signing key not configured");
     }
 
+    // Calendly sends the timestamp inside the signature header as "t=<ts>,v1=<sig>"
+    // No separate Calendly-Webhook-Timestamp header exists in the webhook contract.
     const signatureHeader = req.headers.get("Calendly-Webhook-Signature") || "";
-    const timestamp = req.headers.get("Calendly-Webhook-Timestamp") || "";
 
-    const valid = await verifyCalendlySignature(rawBody, signatureHeader, timestamp, signingKey);
+    const valid = await verifyCalendlySignature(rawBody, signatureHeader, signingKey);
     if (!valid) {
       return err(401, "Invalid webhook signature");
     }
@@ -65,7 +68,16 @@ export default async function (req) {
     const payload = JSON.parse(rawBody);
     const parsed = parseCalendlyEvent(payload);
 
-    if (!parsed.event_type) return ok({ skipped: "no_event_type" });
+    // Reject malformed supported events — do not silently skip
+    if (!parsed.event_type) {
+      return err(400, "Missing webhook event type");
+    }
+    if (!["invitee.created", "invitee.canceled"].includes(parsed.event_type)) {
+      return ok({ skipped: "unsupported_event_type", event_type: parsed.event_type });
+    }
+    if (!parsed.invitee_uri || !parsed.event_uri) {
+      return err(400, "Missing required invitee or event URI in payload");
+    }
 
     // Resolve workspace from the connection by provider user/event ownership.
     // We match the event_type_uri or provider_user_uri to a registered connection.
@@ -122,8 +134,21 @@ export default async function (req) {
 
     const workspaceId = connection.workspace_id;
 
-    // Generate deterministic event ID for deduplication
-    const providerEventId = parsed.event_uuid || deterministicEventId(
+    // Enrich with start_time, end_time, event_title via authenticated lookup
+    // of the scheduled event resource (not present in the invitee webhook payload)
+    if (parsed.event_type === "invitee.created" && !parsed.start_time) {
+      const accessToken = await getConnectionAccessToken(sr, connection.id);
+      if (accessToken) {
+        Object.assign(parsed, await enrichWithEventDetails(parsed, accessToken));
+      }
+    }
+
+    // Generate deterministic event ID for deduplication.
+    // Key includes event_type + event_uuid + invitee_uuid so that:
+    // - Duplicate deliveries of the same event are caught
+    // - A cancel for an already-created appointment is NOT skipped
+    // - Different invitees of the same group event are NOT skipped
+    const providerEventId = deterministicEventId(
       connection.id, parsed.event_type, parsed.invitee_uri, parsed.event_uri
     );
 
