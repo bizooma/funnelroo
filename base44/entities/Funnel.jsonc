@@ -1,0 +1,77 @@
+{
+  "name": "Funnel",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "lead_magnet",
+        "direct_booking",
+        "service_inquiry"
+      ]
+    },
+    "goal": {
+      "type": "string"
+    },
+    "slug": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "published",
+        "paused",
+        "archived"
+      ],
+      "default": "draft"
+    },
+    "active_version_id": {
+      "type": "string"
+    },
+    "audience_id": {
+      "type": "string"
+    },
+    "offer_id": {
+      "type": "string"
+    },
+    "wizard_step": {
+      "type": "number",
+      "default": 1
+    }
+  },
+  "required": [
+    "workspace_id",
+    "name",
+    "type",
+    "slug"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

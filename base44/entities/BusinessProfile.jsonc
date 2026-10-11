@@ -1,0 +1,106 @@
+{
+  "name": "BusinessProfile",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "business_name": {
+      "type": "string"
+    },
+    "website": {
+      "type": "string"
+    },
+    "logo_url": {
+      "type": "string"
+    },
+    "primary_color": {
+      "type": "string"
+    },
+    "accent_color": {
+      "type": "string"
+    },
+    "brand_voice": {
+      "type": "string"
+    },
+    "primary_service": {
+      "type": "string"
+    },
+    "audience_summary": {
+      "type": "string"
+    },
+    "offer_summary": {
+      "type": "string"
+    },
+    "contact_email": {
+      "type": "string"
+    },
+    "time_zone": {
+      "type": "string"
+    },
+    "currency": {
+      "type": "string"
+    },
+    "approved_facts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "proof_sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "claim": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "language_to_use": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "language_to_avoid": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "onboarding_complete": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "workspace_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

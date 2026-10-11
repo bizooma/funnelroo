@@ -1,0 +1,123 @@
+{
+  "name": "FunnelDraft",
+  "type": "object",
+  "properties": {
+    "funnel_id": {
+      "type": "string"
+    },
+    "workspace_id": {
+      "type": "string"
+    },
+    "page_blocks": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "theme": {
+      "type": "object",
+      "properties": {
+        "primary_color": {
+          "type": "string"
+        },
+        "accent_color": {
+          "type": "string"
+        },
+        "font": {
+          "type": "string"
+        }
+      }
+    },
+    "form_config": {
+      "type": "object",
+      "properties": {
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "submit_label": {
+          "type": "string"
+        }
+      }
+    },
+    "resource_id": {
+      "type": "string"
+    },
+    "sequence_ref": {
+      "type": "string"
+    },
+    "booking_config": {
+      "type": "object",
+      "properties": {
+        "calendly_url": {
+          "type": "string"
+        },
+        "event_type": {
+          "type": "string"
+        }
+      }
+    },
+    "publishing_checks": {
+      "type": "object",
+      "properties": {
+        "has_resource": {
+          "type": "boolean"
+        },
+        "has_form": {
+          "type": "boolean"
+        },
+        "has_sender": {
+          "type": "boolean"
+        },
+        "has_sequence": {
+          "type": "boolean"
+        },
+        "has_booking": {
+          "type": "boolean"
+        }
+      }
+    },
+    "wizard_progress": {
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "number"
+        },
+        "completed_steps": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "funnel_id",
+    "workspace_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
