@@ -4,6 +4,7 @@ import { useWorkspace } from "@/lib/workspaceContext";
 import { base44 } from "@/api/base44Client";
 import AppShell from "@/components/AppShell";
 import { BlockEditor } from "@/components/funnel/BlockEditor";
+import { FunnelResourceTab } from "@/components/funnel/FunnelResourceTab";
 import { ComingSoon } from "@/components/ComingSoon";
 import { RooPanel } from "@/components/RooPanel";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ import {
 const TABS = [
   { id: "plan", label: "Plan" },
   { id: "pages", label: "Pages" },
-  { id: "resource", label: "Resource", soon: "Phase 2" },
+  { id: "resource", label: "Resource" },
   { id: "followup", label: "Follow-up", soon: "Phase 2-3" },
   { id: "traffic", label: "Traffic", soon: "Phase 3" },
   { id: "results", label: "Results", soon: "Phase 3" },
@@ -80,7 +81,7 @@ export default function FunnelWorkspace() {
       const hasForm = blocks.some((b) => b.type === "form");
       const hasResource = blocks.some((b) => b.type === "resource");
       const hasBooking = blocks.some((b) => b.type === "booking" && b.props?.calendly_url);
-      const checks = { has_form: hasForm, has_resource: hasResource, has_booking: hasBooking, has_sender: false, has_sequence: false };
+      const checks = { has_form: hasForm, has_resource: !!draft?.resource_version_id, has_booking: hasBooking, has_sender: draft?.delivery_mode === "immediate_plus_email" && !!draft?.sender_id };
       await base44.functions.invoke("funnelAccess", { action: "saveDraft", funnel_id: id, publishing_checks: checks });
       const res = await base44.functions.invoke("funnelAccess", { action: "publish", funnel_id: id });
       await load();
@@ -116,14 +117,16 @@ export default function FunnelWorkspace() {
   const blocks = draft?.page_blocks || [];
   const checks = {
     has_form: blocks.some((b) => b.type === "form"),
-    has_resource: blocks.some((b) => b.type === "resource"),
+    has_resource: !!draft?.resource_version_id,
     has_booking: blocks.some((b) => b.type === "booking" && b.props?.calendly_url),
+    has_sender: draft?.delivery_mode === "immediate_plus_email" && !!draft?.sender_id,
   };
   const readiness = [
     { label: "Landing page sections", ok: blocks.length >= 2 },
-    { label: "Lead form (lead magnet / inquiry)", ok: checks.has_form, needed: funnel.type !== "direct_booking" },
-    { label: "Resource block (lead magnet)", ok: checks.has_resource, needed: funnel.type === "lead_magnet" },
-    { label: "Booking connection (direct booking)", ok: checks.has_booking, needed: funnel.type === "direct_booking" || funnel.type === "lead_magnet" },
+    { label: "Lead form", ok: checks.has_form, needed: funnel.type !== "direct_booking" },
+    { label: "Approved resource version", ok: checks.has_resource, needed: funnel.type === "lead_magnet" },
+    { label: "Verified sender (email delivery)", ok: checks.has_sender, needed: funnel.type === "lead_magnet" && draft?.delivery_mode === "immediate_plus_email" },
+    { label: "Booking connection", ok: checks.has_booking, needed: funnel.type === "direct_booking" || funnel.type === "lead_magnet" },
   ].filter((r) => r.needed !== false);
 
   return (
@@ -240,7 +243,7 @@ export default function FunnelWorkspace() {
         )}
 
         {tab === "resource" && (
-          <Card><CardContent><ComingSoon title="Resource library" description="Upload files or link external resources, with versioning and private delivery grants. A published funnel references a specific approved version." phase="Follow-on Phase 2" /></CardContent></Card>
+          <FunnelResourceTab funnel={funnel} draft={draft} onChanged={load} />
         )}
         {tab === "followup" && (
           <Card><CardContent><ComingSoon title="Nurture sequences" description="Approved email sequences with delays, eligibility checks and stop rules. One active promotional sequence per contact per workspace." phase="Follow-on Phase 2-3" /></CardContent></Card>

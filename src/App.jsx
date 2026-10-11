@@ -19,7 +19,10 @@ import FunnelWorkspace from '@/pages/FunnelWorkspace';
 import Settings from '@/pages/Settings';
 import Onboarding from '@/pages/Onboarding';
 import Contacts from '@/pages/Contacts';
+import ContactDetail from '@/pages/ContactDetail';
+import Resources from '@/pages/Resources';
 import PublicFunnel from '@/pages/PublicFunnel';
+import ResourceAccess from '@/pages/ResourceAccess';
 import AcceptInvite from '@/pages/AcceptInvite';
 import Marketing from '@/pages/Marketing';
 import { LoginRedirect } from '@/components/ProtectedRoute';
@@ -38,6 +41,7 @@ function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/f/:slug" element={<PublicFunnel />} />
+            <Route path="/r/:token" element={<ResourceAccess />} />
             <Route path="/accept-invite" element={<AcceptInvite />} />
 
             {/* Protected routes — require authentication */}
@@ -49,6 +53,8 @@ function App() {
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route path="/contacts" element={<Contacts />} />
+                <Route path="/contacts/:id" element={<ContactDetail />} />
+                <Route path="/resources" element={<Resources />} />
               </Route>
             </Route>
 

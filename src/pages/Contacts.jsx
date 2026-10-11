@@ -4,6 +4,7 @@ import { useWorkspace } from "@/lib/workspaceContext";
 import { base44 } from "@/api/base44Client";
 import AppShell from "@/components/AppShell";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/use-toast";
 import { Loader2, Search, ChevronRight } from "lucide-react";
