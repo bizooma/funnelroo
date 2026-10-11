@@ -1,0 +1,55 @@
+{
+  "name": "CalendarToken",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "connection_id": {
+      "type": "string"
+    },
+    "access_token": {
+      "type": "string"
+    },
+    "refresh_token": {
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "scope": {
+      "type": "string"
+    },
+    "token_type": {
+      "type": "string",
+      "default": "Bearer"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "connection_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    }
+  }
+}

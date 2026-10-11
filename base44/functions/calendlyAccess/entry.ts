@@ -186,7 +186,7 @@ export default async function (req) {
       }
 
       try {
-        const eventTypesData = await fetchCalendlyEventTypes(connection);
+        const eventTypesData = await fetchCalendlyEventTypes(sr, connection);
         // Upsert event types
         for (const et of eventTypesData) {
           const existing = firstRecord(
@@ -271,7 +271,7 @@ export default async function (req) {
       // Attempt to delete webhook subscription at provider
       if (connection.webhook_subscription_uri) {
         try {
-          await deleteCalendlyWebhook(connection);
+          await deleteCalendlyWebhook(sr, connection);
         } catch {}
       }
 
@@ -282,6 +282,14 @@ export default async function (req) {
         outage_hold: false,
         outage_hold_reason: "",
       });
+
+      // Delete the stored OAuth tokens (service-role only)
+      const tokenRec = firstRecord(
+        await sr.entities.CalendarToken.filter({ connection_id: connection.id })
+      );
+      if (tokenRec) {
+        await sr.entities.CalendarToken.delete(tokenRec.id);
+      }
 
       // Mark event types as inactive (preserve for historical reference)
       await sr.entities.BookingEventType.updateMany(
@@ -440,25 +448,32 @@ async function handleCallback(base44, sr, body, req) {
     });
   }
 
-  // Store tokens server-side (encrypted in production — here in a server-only field)
-  // NOTE: In a full implementation, tokens would be encrypted with a key from
-  // secrets and stored in a server-only store. For this phase, we store them
-  // in the connection record which is service-role only (RLS: admin read).
-  // The access_token and refresh_token are never returned to the client.
-  await sr.entities.CalendarConnection.update(connection.id, {
-    // Tokens stored in a private field — never exposed in getStatus response
-    // We use a convention: store as a JSON blob in webhook_subscription_id
-    // field temporarily. In production, use a dedicated encrypted store.
-    // For now, we'll store tokens in-memory (ephemeral) and require re-auth on restart.
-    // This is acceptable for development; production needs a persistent encrypted store.
-  });
-
-  // Store tokens in module-level Map (ephemeral, per-instance)
-  connectionTokens.set(connection.id, {
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token,
-    expires_at: Date.now() + (tokens.expires_in || 3600) * 1000,
-  });
+  // Persist tokens in the server-only CalendarToken entity (RLS denies all
+  // client access — only service-role can read/write). Tokens are never
+  // returned to the client in any API response.
+  const expiresAt = new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString();
+  let tokenRec = firstRecord(
+    await sr.entities.CalendarToken.filter({ workspace_id: stored.workspace_id, connection_id: connection.id })
+  );
+  if (tokenRec) {
+    await sr.entities.CalendarToken.update(tokenRec.id, {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expires_at: expiresAt,
+      scope: REQUIRED_SCOPES.join(" "),
+      token_type: tokens.token_type || "Bearer",
+    });
+  } else {
+    tokenRec = await sr.entities.CalendarToken.create({
+      workspace_id: stored.workspace_id,
+      connection_id: connection.id,
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expires_at: expiresAt,
+      scope: REQUIRED_SCOPES.join(" "),
+      token_type: tokens.token_type || "Bearer",
+    });
+  }
 
   // Try to create webhook subscription (requires paid plan)
   try {
@@ -491,27 +506,30 @@ async function handleCallback(base44, sr, body, req) {
   });
 }
 
-// --- Module-level token store (ephemeral, per-instance) ---
-const connectionTokens = new Map();
+// --- Persistent token store (CalendarToken entity, service-role only) ---
+// Reads and writes go through sr.entities.CalendarToken, whose RLS denies all
+// client access. Tokens never leave the server.
 
-// Get a valid access token, refreshing if needed
-async function getAccessToken(connectionId) {
-  const tokens = connectionTokens.get(connectionId);
-  if (!tokens) return null;
+async function getAccessToken(sr, connectionId) {
+  const tokenRec = firstRecord(
+    await sr.entities.CalendarToken.filter({ connection_id: connectionId })
+  );
+  if (!tokenRec) return null;
 
+  const expiresAt = new Date(tokenRec.expires_at).getTime();
   // Refresh if expires within 5 minutes
-  if (tokens.expires_at < Date.now() + 5 * 60 * 1000) {
+  if (expiresAt < Date.now() + 5 * 60 * 1000) {
     try {
-      const refreshed = await refreshCalendlyToken(connectionId, tokens.refresh_token);
+      const refreshed = await refreshCalendlyToken(sr, connectionId, tokenRec.refresh_token);
       return refreshed.access_token;
     } catch {
       return null;
     }
   }
-  return tokens.access_token;
+  return tokenRec.access_token;
 }
 
-async function refreshCalendlyToken(connectionId, refreshToken) {
+async function refreshCalendlyToken(sr, connectionId, refreshToken) {
   const clientId = secrets.get("CALENDLY_CLIENT_ID");
   const clientSecret = secrets.get("CALENDLY_CLIENT_SECRET");
 
@@ -529,17 +547,25 @@ async function refreshCalendlyToken(connectionId, refreshToken) {
 
   if (!res.ok) throw new Error(`Refresh failed: ${res.status}`);
   const tokens = await res.json();
-  connectionTokens.set(connectionId, {
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token,
-    expires_at: Date.now() + (tokens.expires_in || 3600) * 1000,
-  });
+  const expiresAt = new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString();
+
+  // Persist refreshed tokens
+  const tokenRec = firstRecord(
+    await sr.entities.CalendarToken.filter({ connection_id: connectionId })
+  );
+  if (tokenRec) {
+    await sr.entities.CalendarToken.update(tokenRec.id, {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expires_at: expiresAt,
+    });
+  }
   return tokens;
 }
 
 // --- Calendly API helpers ---
-async function fetchCalendlyEventTypes(connection) {
-  const token = await getAccessToken(connection.id);
+async function fetchCalendlyEventTypes(sr, connection) {
+  const token = await getAccessToken(sr, connection.id);
   if (!token) throw new Error("No valid access token — reconnect required");
 
   const userUri = connection.provider_user_uri;
@@ -595,8 +621,8 @@ async function createCalendlyWebhook(sr, connection, accessToken) {
   });
 }
 
-async function deleteCalendlyWebhook(connection) {
-  const token = await getAccessToken(connection.id);
+async function deleteCalendlyWebhook(sr, connection) {
+  const token = await getAccessToken(sr, connection.id);
   if (!token || !connection.webhook_subscription_uri) return;
   await fetch(connection.webhook_subscription_uri, {
     method: "DELETE",
