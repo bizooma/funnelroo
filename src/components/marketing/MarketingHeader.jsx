@@ -41,7 +41,7 @@ export default function MarketingHeader() {
     <header className="sticky top-0 z-40 w-full border-b border-slate-200/70 bg-white/80 backdrop-blur">
       <div className="mx-auto max-w-6xl px-5 h-16 flex items-center justify-between">
         <Link to="/" aria-label="FunnelRoo home" className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
-          <Logo className="h-11" />
+          <Logo className="h-14" />
         </Link>
 
         <nav className="hidden md:flex items-center gap-7" aria-label="Marketing">
