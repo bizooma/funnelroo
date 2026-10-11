@@ -6,8 +6,8 @@ import { firstRecord, ok, err } from "../../shared/auth.ts";
 export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
-    const url = new URL(req.url);
-    const slug = url.searchParams.get("slug");
+    const body = await req.json().catch(() => ({}));
+    const slug = body.slug;
     if (!slug) return err(400, "Missing slug");
 
     const sr = base44.asServiceRole;
