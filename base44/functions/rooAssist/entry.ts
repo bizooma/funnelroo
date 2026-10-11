@@ -1,0 +1,167 @@
+import { createClientFromRequest } from "npm:@base44/sdk@0.8.52";
+import { requireMembership, firstRecord, asArray, ok, err, HttpError } from "../../shared/auth.ts";
+
+// Roo: the contextual assistant. Drafts content from the approved brief only.
+// Never invents testimonials, results, qualifications, deadlines or scarcity.
+// All output is labeled as a suggestion for an authorized user to approve.
+
+const SYSTEM_RULES = `You are Roo, the friendly assistant inside FunnelRoo, a sales-funnel builder.
+You help a business turn its offer into working funnel pages, resources, emails and campaign copy.
+
+Strict rules:
+- Use ONLY the approved business brief, audience and offer provided. Mark anything you infer as "AI suggestion".
+- NEVER invent testimonials, customer names, statistics, results, qualifications, deadlines or scarcity. If proof is missing, say so and suggest the user add approved proof.
+- Keep copy professional, clear and benefit-focused. Avoid hype and jargon.
+- Return valid JSON matching the requested schema only. No markdown fences.`;
+
+export default async function (req) {
+  try {
+    const base44 = createClientFromRequest(req);
+    const body = await req.json().catch(() => ({}));
+    const action = body.action;
+    const sr = base44.asServiceRole;
+
+    // Roo always operates within an authorized workspace.
+    await requireMembership(base44, body.workspace_id);
+
+    // Load the shared brief for context.
+    const profile = firstRecord(
+      await sr.entities.BusinessProfile.filter({ workspace_id: body.workspace_id })
+    );
+    const audiences = asArray(
+      await sr.entities.Audience.filter({ workspace_id: body.workspace_id })
+    );
+    const offers = asArray(
+      await sr.entities.Offer.filter({ workspace_id: body.workspace_id })
+    );
+
+    const briefText = `BUSINESS BRIEF:
+- Business name: ${profile?.business_name || "(not set)"}
+- Website: ${profile?.website || "(not set)"}
+- Primary service: ${profile?.primary_service || "(not set)"}
+- Brand voice: ${profile?.brand_voice || "(not set)"}
+- Audience summary: ${profile?.audience_summary || "(not set)"}
+- Offer summary: ${profile?.offer_summary || "(not set)"}
+- Approved facts: ${JSON.stringify(profile?.approved_facts || [])}
+- Language to use: ${JSON.stringify(profile?.language_to_use || [])}
+- Language to avoid: ${JSON.stringify(profile?.language_to_avoid || [])}
+AUDIENCES: ${JSON.stringify(audiences.map((a) => ({ name: a.name, problems: a.problems, objections: a.objections, desired_outcomes: a.desired_outcomes })))}
+OFFERS: ${JSON.stringify(offers.map((o) => ({ name: o.name, offer: o.offer, goal: o.goal, cta: o.cta })))}`;
+
+    // ---- draftPageCopy: draft hero + benefits for a funnel type ----
+    if (action === "draftPageCopy") {
+      const funnelType = body.funnel_type || "lead_magnet";
+      const schema = {
+        type: "object",
+        properties: {
+          hero: {
+            type: "object",
+            properties: { headline: { type: "string" }, subheadline: { type: "string" }, cta_label: { type: "string" } },
+          },
+          benefits: {
+            type: "object",
+            properties: { heading: { type: "string" }, items: { type: "array", items: { type: "object", properties: { title: { type: "string" }, description: { type: "string" } } } } },
+          },
+          notes: { type: "string" },
+        },
+      };
+      const prompt = `${SYSTEM_RULES}
+
+${briefText}
+
+Funnel type: ${funnelType}
+Draft the hero section and a benefits section for this funnel's landing page.
+The benefits should reflect the audience's desired outcomes and the offer's value.
+Do not invent proof. If the brief lacks specifics, keep copy general and note it.
+Return JSON matching this schema: ${JSON.stringify(schema)}`;
+      const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
+        prompt,
+        response_json_schema: schema,
+      });
+      return ok({ draft: result, ai_suggested: true });
+    }
+
+    // ---- draftAudience: suggest an audience from the brief ----
+    if (action === "draftAudience") {
+      const schema = {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          roles_industries: { type: "string" },
+          problems: { type: "array", items: { type: "string" } },
+          desired_outcomes: { type: "array", items: { type: "string" } },
+          objections: { type: "array", items: { type: "string" } },
+          alternatives: { type: "array", items: { type: "string" } },
+          notes: { type: "string" },
+        },
+      };
+      const prompt = `${SYSTEM_RULES}
+
+${briefText}
+
+Propose ONE target audience for this business based on the brief. Mark inferred assumptions as AI suggestions in the notes. Do not invent statistics.
+Return JSON matching this schema: ${JSON.stringify(schema)}`;
+      const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
+        prompt,
+        response_json_schema: schema,
+      });
+      return ok({ draft: result, ai_suggested: true });
+    }
+
+    // ---- draftOffer: suggest an offer for a goal ----
+    if (action === "draftOffer") {
+      const schema = {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          offer: { type: "string" },
+          goal: { type: "string" },
+          cta: { type: "string" },
+          supporting_proof: { type: "array", items: { type: "string" } },
+          notes: { type: "string" },
+        },
+      };
+      const prompt = `${SYSTEM_RULES}
+
+${briefText}
+
+Propose an offer for the goal "${body.goal || "lead_magnet"}". The CTA should match the goal. Do not invent results or testimonials; if proof is missing, suggest the user add it.
+Return JSON matching this schema: ${JSON.stringify(schema)}`;
+      const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
+        prompt,
+        response_json_schema: schema,
+      });
+      return ok({ draft: result, ai_suggested: true });
+    }
+
+    // ---- suggestNextStep: Roo explains the next useful action ----
+    if (action === "suggestNextStep") {
+      const context = body.context || {};
+      const schema = {
+        type: "object",
+        properties: {
+          next_step: { type: "string" },
+          why: { type: "string" },
+          evidence: { type: "string" },
+        },
+      };
+      const prompt = `${SYSTEM_RULES}
+
+${briefText}
+
+Current funnel state: ${JSON.stringify(context)}
+Explain the single most useful next action to get this funnel ready to publish. Keep it concrete and short. Note any missing setup (resource, form, sender, sequence, booking) based on the funnel type.
+Return JSON matching this schema: ${JSON.stringify(schema)}`;
+      const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
+        prompt,
+        response_json_schema: schema,
+      });
+      return ok({ suggestion: result });
+    }
+
+    return err(400, `Unknown action: ${action}`);
+  } catch (e) {
+    if (e instanceof HttpError) return err(e.status, e.message);
+    return err(500, e.message);
+  }
+}
