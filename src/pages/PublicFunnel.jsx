@@ -6,10 +6,11 @@ import { MascotBadge } from "@/components/MascotBadge";
 import { Loader2, FileQuestion, RefreshCw } from "lucide-react";
 
 // Anonymous public funnel page. No auth required. Reads only the approved
-// published snapshot, submits the form to the capture backend, and shows a
-// branded confirmation with immediate resource access.
+// published snapshot (resolved by immutable public_id), submits the form with
+// a published-version binding to the capture backend, and shows a branded
+// confirmation with immediate resource access.
 export default function PublicFunnel() {
-  const { slug } = useParams();
+  const { publicId } = useParams();
   const [searchParams] = useSearchParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -21,7 +22,7 @@ export default function PublicFunnel() {
     (async () => {
       setLoading(true);
       try {
-        const res = await base44.functions.invoke("getPublishedFunnel", { slug });
+        const res = await base44.functions.invoke("getPublishedFunnel", { public_id: publicId });
         if (res.status === 200) {
           setData(res.data);
           setFormState((s) => ({ ...s, consentText: res.data?.consent_text || "" }));
@@ -34,7 +35,7 @@ export default function PublicFunnel() {
         setLoading(false);
       }
     })();
-  }, [slug]);
+  }, [publicId]);
 
   async function handleSubmit(answers, consentChoice, honeypot) {
     // generate (or reuse) a request id for this attempt cycle — retries reuse it
@@ -43,7 +44,8 @@ export default function PublicFunnel() {
     setFormState((s) => ({ ...s, submitting: true, error: "" }));
     try {
       const res = await base44.functions.invoke("captureSubmission", {
-        slug,
+        public_id: publicId,
+        published_version_id: data?.version?.version_id,
         request_id,
         form_version: data?.form_version,
         answers,
@@ -57,8 +59,15 @@ export default function PublicFunnel() {
         requestIdRef.current = null; // a later intentional resubmit gets a fresh id
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else if (res.status === 409) {
-        // stale form version — ask the visitor to reload
-        setFormState((s) => ({ ...s, submitting: false, error: "This page has been updated. Please reload and resubmit the current form." }));
+        if (res.data?.conflict) {
+          setFormState((s) => ({ ...s, submitting: false, error: "This form was already submitted with different data. Please reload the page." }));
+        } else {
+          // stale form version — ask the visitor to reload
+          setFormState((s) => ({ ...s, submitting: false, error: "This page has been updated. Please reload and resubmit the current form." }));
+        }
+        requestIdRef.current = null;
+      } else if (res.status === 429) {
+        setFormState((s) => ({ ...s, submitting: false, error: res.data?.error || "Too many submissions. Please wait a moment." }));
         requestIdRef.current = null;
       } else {
         setFormState((s) => ({ ...s, submitting: false, error: res.data?.error || "Submission failed. Please try again." }));

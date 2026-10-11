@@ -69,4 +69,45 @@ export function err(status, message) {
   return Response.json({ error: message }, { status });
 }
 
+// Generate a short, URL-safe, globally-unique public id for funnels.
+// Not a hard uniqueness guarantee (Base44 has no unique constraints); callers
+// should check for collisions at creation time.
+export function generatePublicId() {
+  return crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+}
+
+// Deterministic JSON serialization for payload fingerprinting.
+// Sorts object keys at every depth so the same logical payload always
+// produces the same string regardless of key insertion order.
+export function stableStringify(obj) {
+  if (obj === null || typeof obj !== "object") return JSON.stringify(obj);
+  if (Array.isArray(obj)) return "[" + obj.map(stableStringify).join(",") + "]";
+  const keys = Object.keys(obj).sort();
+  return "{" + keys.map((k) => JSON.stringify(k) + ":" + stableStringify(obj[k])).join(",") + "}";
+}
+
+// Compute a payload fingerprint for submission idempotency.
+// Same request_id + same fingerprint = retry → return same result.
+// Same request_id + different fingerprint = conflict.
+export function computeFingerprint(payload) {
+  return stableStringify(payload);
+}
+
+// Deduplicate records by a query, keeping the oldest (by created_date, then id).
+// Calls reassign(duplicateId, survivorId) for each duplicate before deletion
+// so related records can be repointed. Returns the survivor.
+export async function dedupKeepOldest(sr, entityName, query, reassign) {
+  const records = asArray(await sr.entities[entityName].filter(query, { sort: "created_date" }));
+  if (records.length <= 1) return records[0] || null;
+  const survivor = records[0];
+  for (let i = 1; i < records.length; i++) {
+    const dup = records[i];
+    if (reassign) {
+      try { await reassign(dup.id, survivor.id); } catch {}
+    }
+    try { await sr.entities[entityName].delete(dup.id); } catch {}
+  }
+  return survivor;
+}
+
 export { firstRecord, asArray };

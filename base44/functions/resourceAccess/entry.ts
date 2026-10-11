@@ -9,6 +9,12 @@ import {
 } from "../../shared/auth.ts";
 
 // Workspace-authorized resource library: resources, versions, attach to funnel.
+// File uploads are bound to workspace ownership via a server-authorized Upload
+// record. The client uploads via UploadPrivateFile, then registers the file_uri
+// with the server (which authorizes the workspace and creates an Upload record).
+// createVersion resolves the file_uri from the Upload record — never from the
+// client directly — and verifies the Upload's workspace matches the resource's.
+
 const ALLOWED_FILE_TYPES = [
   "application/pdf", "application/zip",
   "image/png", "image/jpeg", "image/gif", "image/webp",
@@ -40,7 +46,6 @@ export default async function (req) {
       const resources = asArray(
         await sr.entities.Resource.filter({ workspace_id: body.workspace_id, archived: { $ne: true } }, { sort: "-created_date" })
       );
-      // attach active version summary
       const versionIds = resources.map((r) => r.active_version_id).filter(Boolean);
       let versionsById = {};
       if (versionIds.length) {
@@ -95,7 +100,41 @@ export default async function (req) {
       return ok({ resource: updated });
     }
 
-    // ---- createVersion (file upload already done client-side -> file_uri) ----
+    // ---- registerUpload: bind a client-uploaded file_uri to a workspace ----
+    // The client uploads via UploadPrivateFile (client-side), then calls this
+    // action. The server authorizes the workspace, validates the file metadata,
+    // and creates an Upload record binding file_uri to the workspace. The
+    // returned upload_id is then passed to createVersion.
+    if (action === "registerUpload") {
+      const { user } = await requireMembership(base44, body.workspace_id, ["owner", "admin", "member"]);
+      const fileUri = String(body.file_uri || "").trim();
+      if (!fileUri) return err(400, "file_uri is required");
+      const filename = String(body.filename || "").trim();
+      if (!filename) return err(400, "filename is required");
+      const contentType = String(body.content_type || "application/octet-stream");
+      if (!ALLOWED_FILE_TYPES.includes(contentType)) {
+        return err(400, "This file type is not supported");
+      }
+      const sizeBytes = Number(body.size_bytes || 0);
+      if (sizeBytes > MAX_FILE_BYTES) {
+        return err(400, `File exceeds the ${MAX_FILE_BYTES / 1024 / 1024}MB limit`);
+      }
+      const upload = await sr.entities.Upload.create({
+        workspace_id: body.workspace_id,
+        file_uri: fileUri,
+        filename,
+        content_type: contentType,
+        size_bytes: sizeBytes,
+        created_by: user.id,
+        consumed: false,
+      });
+      return ok({ upload_id: upload.id });
+    }
+
+    // ---- createVersion ----
+    // For file resources, takes upload_id (NOT raw file_uri). Resolves the
+    // Upload record, verifies its workspace matches the resource's workspace,
+    // and uses the trusted file_uri + metadata from the Upload record.
     if (action === "createVersion") {
       const resource = firstRecord(await sr.entities.Resource.filter({ id: body.resource_id }));
       if (!resource) return err(404, "Resource not found");
@@ -114,31 +153,31 @@ export default async function (req) {
         versionData.external_url = normalizeUrl(body.external_url);
         versionData.filename = "";
       } else {
-        // file: client uploaded via UploadPrivateFile and passes file_uri + metadata
-        if (!body.file_uri) return err(400, "file_uri is required for file resources");
-        if (body.size_bytes && Number(body.size_bytes) > MAX_FILE_BYTES) {
-          return err(400, `File exceeds the ${MAX_FILE_BYTES / 1024 / 1024}MB limit`);
+        // File: resolve from the server-authorized Upload record
+        const uploadId = String(body.upload_id || "").trim();
+        if (!uploadId) return err(400, "upload_id is required for file resources");
+        const upload = firstRecord(await sr.entities.Upload.filter({ id: uploadId }));
+        if (!upload) return err(404, "Upload not found");
+        if (upload.workspace_id !== resource.workspace_id) {
+          return err(403, "Upload does not belong to this workspace");
         }
-        if (body.content_type && !ALLOWED_FILE_TYPES.includes(body.content_type)) {
-          return err(400, "This file type is not supported");
-        }
-        versionData.file_uri = String(body.file_uri);
-        versionData.filename = String(body.filename || "resource");
-        versionData.content_type = String(body.content_type || "application/octet-stream");
-        versionData.size_bytes = Number(body.size_bytes || 0);
+        // Use trusted metadata from the Upload record (not client-supplied)
+        versionData.file_uri = upload.file_uri;
+        versionData.filename = upload.filename;
+        versionData.content_type = upload.content_type;
+        versionData.size_bytes = upload.size_bytes;
+        // Mark the upload as consumed
+        await sr.entities.Upload.update(upload.id, { consumed: true });
       }
 
-      // count existing versions
       const versions = asArray(await sr.entities.ResourceVersion.filter({ resource_id: resource.id }));
       const versionNumber = versions.length + 1;
       versionData.version_number = versionNumber;
 
-      // deactivate previous active version
       if (resource.active_version_id) {
         await sr.entities.ResourceVersion.update(resource.active_version_id, { active: false });
       }
       const version = await sr.entities.ResourceVersion.create(versionData);
-      // promote new version as active on the resource
       await sr.entities.Resource.update(resource.id, { active_version_id: version.id, delivery_type });
       return ok({ resource: await sr.entities.Resource.update(resource.id, {}), version });
     }
@@ -148,7 +187,6 @@ export default async function (req) {
       const resource = firstRecord(await sr.entities.Resource.filter({ id: body.resource_id }));
       if (!resource) return err(404, "Resource not found");
       await requireMembership(base44, resource.workspace_id, ["owner", "admin", "member"]);
-      // resolve funnel workspace
       const funnel = firstRecord(await sr.entities.Funnel.filter({ id: body.funnel_id }));
       if (!funnel) return err(404, "Funnel not found");
       if (funnel.workspace_id !== resource.workspace_id) {

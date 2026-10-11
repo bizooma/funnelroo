@@ -7,6 +7,7 @@ import {
   ok,
   err,
   HttpError,
+  generatePublicId,
 } from "../../shared/auth.ts";
 
 function slugify(text) {
@@ -57,6 +58,18 @@ function defaultBlocks(type) {
   ];
 }
 
+// Ensure a funnel has a public_id (generates one if missing, atomically)
+async function ensurePublicId(sr, funnel) {
+  if (funnel.public_id) return funnel;
+  const publicId = generatePublicId();
+  await sr.entities.Funnel.updateMany(
+    { id: funnel.id, public_id: { $exists: false } },
+    { $set: { public_id } }
+  );
+  const refreshed = firstRecord(await sr.entities.Funnel.filter({ id: funnel.id }));
+  return refreshed || funnel;
+}
+
 export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
@@ -70,13 +83,21 @@ export default async function (req) {
       const funnels = asArray(
         await sr.entities.Funnel.filter({ workspace_id: body.workspace_id }, { sort: "-created_date" })
       );
-      return ok({ funnels });
+      // Backfill public_id for any funnels missing one
+      for (const f of funnels) {
+        if (!f.public_id) await ensurePublicId(sr, f);
+      }
+      const refreshed = asArray(
+        await sr.entities.Funnel.filter({ workspace_id: body.workspace_id }, { sort: "-created_date" })
+      );
+      return ok({ funnels: refreshed });
     }
 
     // ---- get (funnel + draft) ----
     if (action === "get") {
       const { funnel, workspaceId } = await resolveFunnelWorkspace(base44, body.funnel_id);
       await requireMembership(base44, workspaceId);
+      const funnelWithPid = await ensurePublicId(sr, funnel);
       let draft = firstRecord(
         await sr.entities.FunnelDraft.filter({ funnel_id: funnel.id })
       );
@@ -92,7 +113,7 @@ export default async function (req) {
           wizard_progress: { step: 1, completed_steps: [] },
         });
       }
-      return ok({ funnel, draft });
+      return ok({ funnel: funnelWithPid, draft });
     }
 
     // ---- create ----
@@ -105,16 +126,23 @@ export default async function (req) {
         return err(400, "Invalid funnel type");
       }
       let slug = slugify(body.slug || name);
+      if (!slug) slug = "funnel-" + Date.now().toString(36);
+      // workspace-scoped slug uniqueness
       const existing = asArray(
         await sr.entities.Funnel.filter({ workspace_id: body.workspace_id, slug })
       );
       if (existing.length) slug = `${slug}-${Math.random().toString(36).slice(2, 5)}`;
+      // globally-unique public_id for public URLs
+      let publicId = generatePublicId();
+      const existingPublic = firstRecord(await sr.entities.Funnel.filter({ public_id: publicId }));
+      if (existingPublic) publicId = generatePublicId() + Date.now().toString(36);
       const funnel = await sr.entities.Funnel.create({
         workspace_id: body.workspace_id,
         name,
         type,
         goal: body.goal || type,
         slug,
+        public_id: publicId,
         state: "draft",
         wizard_step: 1,
         audience_id: body.audience_id || "",
@@ -134,14 +162,31 @@ export default async function (req) {
     }
 
     // ---- update funnel meta ----
+    // Protected lifecycle fields (state, public_id) are NOT settable here.
+    // state changes go through setState (owner/admin only).
     if (action === "update") {
       const { funnel, workspaceId } = await resolveFunnelWorkspace(base44, body.funnel_id);
       await requireMembership(base44, workspaceId, ["owner", "admin", "member"]);
       const update = {};
-      for (const k of ["name", "type", "goal", "slug", "state", "audience_id", "offer_id", "wizard_step"]) {
+      // Only non-protected metadata fields are settable
+      for (const k of ["name", "type", "goal", "slug", "audience_id", "offer_id", "wizard_step"]) {
         if (body[k] !== undefined) update[k] = body[k];
       }
-      if (update.slug) update.slug = slugify(update.slug);
+      if (update.slug) {
+        update.slug = slugify(update.slug);
+        if (!update.slug) return err(400, "Invalid slug");
+        // workspace-scoped slug uniqueness (excluding self)
+        const existing = asArray(
+          await sr.entities.Funnel.filter({ workspace_id: workspaceId, slug: update.slug })
+        );
+        if (existing.length && existing[0].id !== funnel.id) {
+          return err(400, "That slug is already used by another funnel in this workspace");
+        }
+      }
+      // public_id is immutable — never allow it to change
+      delete update.public_id;
+      // state is protected — never allow it via generic update
+      delete update.state;
       const funnelUpdated = await sr.entities.Funnel.update(funnel.id, update);
       return ok({ funnel: funnelUpdated });
     }
@@ -178,7 +223,6 @@ export default async function (req) {
         await sr.entities.FunnelDraft.filter({ funnel_id: funnel.id })
       );
       if (!draft) return err(400, "Nothing to publish — save a draft first");
-      // template-specific publishing checks
       const checks = draft.publishing_checks || {};
       const blocks = draft.page_blocks || [];
       const hasForm = blocks.some((b) => b.type === "form");
@@ -192,7 +236,6 @@ export default async function (req) {
       if (funnel.type === "direct_booking" && !checks.has_booking) {
         return err(400, "Direct booking funnels require a booking connection before publishing");
       }
-      // email fulfillment requires a verified sender
       const deliveryMode = draft.delivery_mode || "immediate_only";
       let senderVerified = false;
       if (deliveryMode === "immediate_plus_email") {
@@ -202,7 +245,6 @@ export default async function (req) {
         if (!sender.verified) return err(400, "Verify your sender before publishing email delivery");
         senderVerified = true;
       }
-      // compute form_version + resource_title for the snapshot
       const formBlock = blocks.find((b) => b.type === "form");
       const formFields = formBlock?.props?.fields || [];
       const formVersion = JSON.stringify(formFields.map((f) => ({ n: f.name, l: f.label, t: f.type, r: !!f.required })));
@@ -214,12 +256,10 @@ export default async function (req) {
           resourceTitle = resource?.title || "";
         }
       }
-      // count existing versions
       const versions = asArray(
         await sr.entities.PublishedFunnelVersion.filter({ funnel_id: funnel.id })
       );
       const versionNumber = versions.length + 1;
-      // deactivate previous active version
       if (funnel.active_version_id) {
         await sr.entities.PublishedFunnelVersion.update(funnel.active_version_id, {
           active: false,
@@ -291,11 +331,27 @@ export default async function (req) {
       return ok({ version });
     }
 
-    // ---- pause / resume ----
+    // ---- pause / resume (owner/admin only) ----
+    // Enforces permitted state transitions consistently.
     if (action === "setState") {
       const { funnel, workspaceId } = await resolveFunnelWorkspace(base44, body.funnel_id);
       await requireMembership(base44, workspaceId, ["owner", "admin"]);
-      const funnelUpdated = await sr.entities.Funnel.update(funnel.id, { state: body.state });
+      const newState = body.state;
+      if (!["draft", "published", "paused", "archived"].includes(newState)) {
+        return err(400, "Invalid state");
+      }
+      // Permitted transitions
+      const from = funnel.state;
+      const allowed: Record<string, string[]> = {
+        draft: ["published", "archived"],
+        published: ["paused", "archived"],
+        paused: ["published", "archived"],
+        archived: ["draft"],
+      };
+      if (!allowed[from]?.includes(newState)) {
+        return err(400, `Cannot transition from ${from} to ${newState}`);
+      }
+      const funnelUpdated = await sr.entities.Funnel.update(funnel.id, { state: newState });
       return ok({ funnel: funnelUpdated });
     }
 

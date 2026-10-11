@@ -22,6 +22,9 @@
     "slug": {
       "type": "string"
     },
+    "public_id": {
+      "type": "string"
+    },
     "state": {
       "type": "string",
       "enum": [

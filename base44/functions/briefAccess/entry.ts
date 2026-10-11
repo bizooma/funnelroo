@@ -59,11 +59,11 @@ export default async function (req) {
     }
 
     // ---- saveAudience (create or update) ----
+    // On update, loads the existing record and authorizes by its actual workspace.
+    // workspace_id can never change on update.
     if (action === "saveAudience") {
       await requireMembership(base44, body.workspace_id);
       const data = {
-        workspace_id: body.workspace_id,
-        name: body.name,
         roles_industries: body.roles_industries,
         problems: body.problems || [],
         desired_outcomes: body.desired_outcomes || [],
@@ -74,9 +74,20 @@ export default async function (req) {
       };
       let audience;
       if (body.id) {
-        audience = await sr.entities.Audience.update(body.id, data);
+        // Load the existing record and authorize by its actual workspace
+        const existing = firstRecord(await sr.entities.Audience.filter({ id: body.id }));
+        if (!existing) return err(404, "Audience not found");
+        if (existing.workspace_id !== body.workspace_id) {
+          return err(403, "Audience not in this workspace");
+        }
+        // workspace_id is never changed on update
+        audience = await sr.entities.Audience.update(body.id, { ...data, name: body.name });
       } else {
-        audience = await sr.entities.Audience.create(data);
+        audience = await sr.entities.Audience.create({
+          workspace_id: body.workspace_id,
+          name: body.name,
+          ...data,
+        });
       }
       return ok({ audience });
     }
@@ -92,11 +103,11 @@ export default async function (req) {
     }
 
     // ---- saveOffer ----
+    // On update, loads the existing record and authorizes by its actual workspace.
+    // workspace_id can never change on update.
     if (action === "saveOffer") {
       await requireMembership(base44, body.workspace_id);
       const data = {
-        workspace_id: body.workspace_id,
-        name: body.name,
         offer: body.offer,
         goal: body.goal,
         cta: body.cta,
@@ -106,9 +117,20 @@ export default async function (req) {
       };
       let offer;
       if (body.id) {
-        offer = await sr.entities.Offer.update(body.id, data);
+        // Load the existing record and authorize by its actual workspace
+        const existing = firstRecord(await sr.entities.Offer.filter({ id: body.id }));
+        if (!existing) return err(404, "Offer not found");
+        if (existing.workspace_id !== body.workspace_id) {
+          return err(403, "Offer not in this workspace");
+        }
+        // workspace_id is never changed on update
+        offer = await sr.entities.Offer.update(body.id, { ...data, name: body.name });
       } else {
-        offer = await sr.entities.Offer.create(data);
+        offer = await sr.entities.Offer.create({
+          workspace_id: body.workspace_id,
+          name: body.name,
+          ...data,
+        });
       }
       return ok({ offer });
     }

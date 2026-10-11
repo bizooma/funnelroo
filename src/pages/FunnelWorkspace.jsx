@@ -142,13 +142,13 @@ export default function FunnelWorkspace() {
             <div className="flex items-center gap-2 mt-1">
               <span className="text-xs text-slate-400 capitalize">{funnel.type.replace("_", " ")}</span>
               <span className="text-slate-300">·</span>
-              <span className="text-xs text-slate-400">/f/{funnel.slug}</span>
+              <span className="text-xs text-slate-400">/f/{funnel.public_id}</span>
               <StateBadge state={funnel.state} />
             </div>
           </div>
           <div className="flex items-center gap-2">
             {funnel.state === "published" && (
-              <a href={`/f/${funnel.slug}`} target="_blank" rel="noopener noreferrer">
+              <a href={`/f/${funnel.public_id}`} target="_blank" rel="noopener noreferrer">
                 <Button variant="outline" size="sm"><ExternalLink className="w-3.5 h-3.5 mr-1.5" /> View live</Button>
               </a>
             )}

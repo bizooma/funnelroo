@@ -40,7 +40,7 @@ function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/f/:slug" element={<PublicFunnel />} />
+            <Route path="/f/:publicId" element={<PublicFunnel />} />
             <Route path="/r/:token" element={<ResourceAccess />} />
             <Route path="/accept-invite" element={<AcceptInvite />} />
 

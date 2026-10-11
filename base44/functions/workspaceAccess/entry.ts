@@ -23,11 +23,11 @@ export default async function (req) {
     const base44 = createClientFromRequest(req);
     const body = await req.json().catch(() => ({}));
     const action = body.action;
+    const sr = base44.asServiceRole;
 
     // ---- listMine: workspaces the user belongs to ----
     if (action === "listMine") {
       const user = await requireUser(base44);
-      const sr = base44.asServiceRole;
       const memberships = asArray(
         await sr.entities.Membership.filter({ user_id: user.id, status: "active" })
       );
@@ -35,7 +35,6 @@ export default async function (req) {
       const ids = memberships.map((m) => m.workspace_id);
       const wsResult = await sr.entities.Workspace.filter({ id: { $in: ids } });
       const workspaces = asArray(wsResult);
-      // attach role per workspace
       const byId = {};
       memberships.forEach((m) => (byId[m.workspace_id] = m.role));
       return ok({
@@ -48,9 +47,7 @@ export default async function (req) {
       const user = await requireUser(base44);
       const name = String(body.name || "").trim();
       if (!name) return err(400, "Workspace name is required");
-      const sr = base44.asServiceRole;
       let slug = slugify(body.slug || name);
-      // ensure slug uniqueness
       const existing = asArray(await sr.entities.Workspace.filter({ slug }));
       if (existing.length) slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
       const workspace = await sr.entities.Workspace.create({
@@ -84,7 +81,6 @@ export default async function (req) {
     // ---- getContext: workspace + profile + my role + member count ----
     if (action === "getContext") {
       const { membership } = await requireMembership(base44, body.workspace_id);
-      const sr = base44.asServiceRole;
       const workspace = firstRecord(
         await sr.entities.Workspace.filter({ id: body.workspace_id })
       );
@@ -109,7 +105,7 @@ export default async function (req) {
       const role = body.role === "admin" ? "admin" : "member";
       const token = crypto.randomUUID();
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-      const invite = await base44.asServiceRole.entities.Invite.create({
+      const invite = await sr.entities.Invite.create({
         workspace_id: body.workspace_id,
         email,
         role,
@@ -125,7 +121,7 @@ export default async function (req) {
     if (action === "listInvites") {
       await requireMembership(base44, body.workspace_id, ["owner", "admin"]);
       const invites = asArray(
-        await base44.asServiceRole.entities.Invite.filter({
+        await sr.entities.Invite.filter({
           workspace_id: body.workspace_id,
           status: "pending",
         })
@@ -137,7 +133,7 @@ export default async function (req) {
     if (action === "listMembers") {
       await requireMembership(base44, body.workspace_id);
       const members = asArray(
-        await base44.asServiceRole.entities.Membership.filter({
+        await sr.entities.Membership.filter({
           workspace_id: body.workspace_id,
           status: "active",
         })
@@ -145,65 +141,111 @@ export default async function (req) {
       return ok({ members });
     }
 
-    // ---- updateMemberRole: owner only ----
+    // ---- updateMemberRole: owner only, authorizes the TARGET record ----
     if (action === "updateMemberRole") {
       const { membership } = await requireMembership(base44, body.workspace_id, ["owner"]);
-      if (body.member_id === membership.id && body.role !== "owner") {
-        return err(400, "Transfer ownership explicitly instead of demoting yourself");
+      // Load the target membership and authorize by its actual workspace
+      const target = firstRecord(await sr.entities.Membership.filter({ id: body.member_id }));
+      if (!target) return err(404, "Member not found");
+      if (target.workspace_id !== body.workspace_id) {
+        return err(403, "Member not in this workspace");
       }
-      await base44.asServiceRole.entities.Membership.update(body.member_id, {
-        role: body.role,
-      });
+      // Only admin/member are settable here; ownership changes go through transferOwnership
+      const newRole = body.role;
+      if (!["admin", "member"].includes(newRole)) {
+        return err(400, "Invalid role. Use transfer ownership to change ownership.");
+      }
+      // Cannot change your own role here
+      if (target.id === membership.id) {
+        return err(400, "Use transfer ownership to change your own role");
+      }
+      // Cannot change an owner's role here
+      if (target.role === "owner") {
+        return err(400, "Use transfer ownership to change the owner");
+      }
+      await sr.entities.Membership.update(target.id, { role: newRole });
       return ok({ updated: true });
     }
 
-    // ---- removeMember: owner or self ----
+    // ---- transferOwnership: owner only, promotes target and demotes self ----
+    if (action === "transferOwnership") {
+      const { membership } = await requireMembership(base44, body.workspace_id, ["owner"]);
+      const target = firstRecord(await sr.entities.Membership.filter({ id: body.member_id }));
+      if (!target) return err(404, "Member not found");
+      if (target.workspace_id !== body.workspace_id) {
+        return err(403, "Member not in this workspace");
+      }
+      if (target.id === membership.id) return err(400, "You are already the owner");
+      if (target.status !== "active") return err(400, "Target member is not active");
+      // Demote current owner to admin, promote target to owner
+      await sr.entities.Membership.update(membership.id, { role: "admin" });
+      await sr.entities.Membership.update(target.id, { role: "owner" });
+      return ok({ transferred: true });
+    }
+
+    // ---- removeMember: owner or admin, authorizes the TARGET record ----
     if (action === "removeMember") {
-      const { user, membership } = await requireMembership(base44, body.workspace_id, [
+      const { membership } = await requireMembership(base44, body.workspace_id, [
         "owner",
         "admin",
       ]);
       const target = firstRecord(
-        await base44.asServiceRole.entities.Membership.filter({ id: body.member_id })
+        await sr.entities.Membership.filter({ id: body.member_id })
       );
       if (!target || target.workspace_id !== body.workspace_id) {
         return err(404, "Member not found in this workspace");
       }
       if (target.role === "owner") return err(400, "Cannot remove the owner");
-      await base44.asServiceRole.entities.Membership.update(body.member_id, {
+      if (target.id === membership.id) return err(400, "You cannot remove yourself");
+      await sr.entities.Membership.update(body.member_id, {
         status: "revoked",
       });
       return ok({ removed: true });
     }
 
-    // ---- acceptInvite ----
+    // ---- acceptInvite: matches the intended recipient, preserves ownership ----
     if (action === "acceptInvite") {
       const user = await requireUser(base44);
       const invite = firstRecord(
-        await base44.asServiceRole.entities.Invite.filter({
+        await sr.entities.Invite.filter({
           token: body.token,
           status: "pending",
         })
       );
       if (!invite) return err(404, "Invite not found or already used");
       if (new Date(invite.expires_at).getTime() < Date.now()) {
-        await base44.asServiceRole.entities.Invite.update(invite.id, { status: "expired" });
+        await sr.entities.Invite.update(invite.id, { status: "expired" });
         return err(410, "This invite has expired");
       }
-      // create membership
+      // Match the authenticated user to the intended recipient email
+      if (invite.email !== String(user.email || "").toLowerCase()) {
+        return err(403, "This invite was sent to a different email address. Log in with the correct account.");
+      }
+      // Atomically claim the invite so concurrent acceptances don't double-process
+      await sr.entities.Invite.updateMany(
+        { id: invite.id, status: "pending" },
+        { $set: { status: "accepted" } }
+      );
+      // Create or update membership, preserving ownership and never downgrading
       const existing = firstRecord(
-        await base44.asServiceRole.entities.Membership.filter({
+        await sr.entities.Membership.filter({
           workspace_id: invite.workspace_id,
           user_id: user.id,
         })
       );
+      let finalRole = invite.role;
       if (existing) {
-        await base44.asServiceRole.entities.Membership.update(existing.id, {
-          status: "active",
-          role: invite.role,
-        });
+        if (existing.role === "owner") {
+          // Preserve ownership — never downgrade an owner
+          finalRole = "owner";
+          await sr.entities.Membership.update(existing.id, { status: "active" });
+        } else {
+          // Only upgrade (member → admin), never downgrade
+          finalRole = (invite.role === "admin" && existing.role === "member") ? "admin" : existing.role;
+          await sr.entities.Membership.update(existing.id, { status: "active", role: finalRole });
+        }
       } else {
-        await base44.asServiceRole.entities.Membership.create({
+        await sr.entities.Membership.create({
           workspace_id: invite.workspace_id,
           user_id: user.id,
           user_email: user.email,
@@ -211,9 +253,17 @@ export default async function (req) {
           role: invite.role,
           status: "active",
         });
+        // Dedup in case of concurrent creates
+        const dups = asArray(
+          await sr.entities.Membership.filter({ workspace_id: invite.workspace_id, user_id: user.id })
+        );
+        if (dups.length > 1) {
+          for (let i = 1; i < dups.length; i++) {
+            try { await sr.entities.Membership.delete(dups[i].id); } catch {}
+          }
+        }
       }
-      await base44.asServiceRole.entities.Invite.update(invite.id, { status: "accepted" });
-      return ok({ workspace_id: invite.workspace_id, role: invite.role });
+      return ok({ workspace_id: invite.workspace_id, role: finalRole });
     }
 
     // ---- updateWorkspace (owner only) ----
@@ -224,7 +274,7 @@ export default async function (req) {
       if (body.mascot_image_url !== undefined) update.mascot_image_url = body.mascot_image_url;
       if (body.plan) update.plan = body.plan;
       if (body.status) update.status = body.status;
-      const workspace = await base44.asServiceRole.entities.Workspace.update(
+      const workspace = await sr.entities.Workspace.update(
         body.workspace_id,
         update
       );

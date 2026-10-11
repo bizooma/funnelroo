@@ -138,15 +138,23 @@ function ResourceCard({ resource, onChanged }) {
     }
     setUploading(true);
     try {
+      // 1. Upload to private storage (stored privately)
       const up = await base44.integrations.Core.UploadPrivateFile({ file });
+      // 2. Register the upload with the server — binds file_uri to this workspace
+      const reg = await base44.functions.invoke("resourceAccess", {
+        action: "registerUpload",
+        workspace_id: current.id,
+        file_uri: up.file_uri,
+        filename: file.name,
+        content_type: file.type || "application/octet-stream",
+        size_bytes: file.size,
+      });
+      // 3. Create the version using the server-authorized upload_id (not raw file_uri)
       await base44.functions.invoke("resourceAccess", {
         action: "createVersion",
         resource_id: resource.id,
         delivery_type: "file",
-        file_uri: up.file_uri,
-        filename: file.name,
-        content_type: file.type,
-        size_bytes: file.size,
+        upload_id: reg.data?.upload_id,
       });
       await onChanged();
       toast({ title: "New version uploaded" });

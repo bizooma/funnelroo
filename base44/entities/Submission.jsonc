@@ -23,6 +23,12 @@
     "request_id": {
       "type": "string"
     },
+    "email_normalized": {
+      "type": "string"
+    },
+    "payload_fingerprint": {
+      "type": "string"
+    },
     "answers": {
       "type": "object"
     },
@@ -67,7 +73,6 @@
   "required": [
     "workspace_id",
     "funnel_id",
-    "contact_id",
     "request_id"
   ],
   "rls": {
