@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useWorkspace } from "@/lib/workspaceContext";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
@@ -7,20 +7,35 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/use-toast";
-import { Loader2, Check, Plus, Mail, Send, AlertTriangle, BadgeCheck } from "lucide-react";
+import { Loader2, Check, Plus, Mail, Send, AlertTriangle, Info } from "lucide-react";
 
 // Resource + delivery configuration for a funnel. Lets the operator attach an
 // approved resource version, choose immediate access vs. access + email,
-// select/verify a sender, and set optional marketing-consent text.
+// select a sender, and set optional marketing-consent text.
+//
+// Provider honesty: the platform Core.SendEmail is the interim provider. It
+// sends from FunnelRoo's own address, not the customer's domain. A test send
+// confirms platform delivery to the owner, NOT domain verification. Custom-
+// domain sending requires an external email provider (not yet configured).
 export function FunnelResourceTab({ funnel, draft, onChanged }) {
   const { current, canAdmin } = useWorkspace();
   const [resources, setResources] = useState([]);
   const [senders, setSenders] = useState([]);
+  const [externalProviderConfigured, setExternalProviderConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showSender, setShowSender] = useState(false);
   const [senderForm, setSenderForm] = useState({ email: "", from_name: "", reply_to: "" });
   const [testing, setTesting] = useState(null);
+  const [consentText, setConsentText] = useState(draft?.consent_text || "");
+  const consentRef = useRef(consentText);
+
+  // Keep local consent text in sync when draft reloads (but not while editing)
+  useEffect(() => {
+    if (consentRef.current === draft?.consent_text) return;
+    consentRef.current = draft?.consent_text || "";
+    setConsentText(draft?.consent_text || "");
+  }, [draft?.consent_text]);
 
   async function load() {
     if (!current) return;
@@ -32,6 +47,7 @@ export function FunnelResourceTab({ funnel, draft, onChanged }) {
       ]);
       setResources(rRes.data?.resources || []);
       setSenders(sRes.data?.senders || []);
+      setExternalProviderConfigured(sRes.data?.external_provider_configured || false);
     } catch (e) {
       toast({ title: "Could not load delivery config", variant: "destructive" });
     } finally {
@@ -65,6 +81,21 @@ export function FunnelResourceTab({ funnel, draft, onChanged }) {
     }
   }
 
+  // Save consent text on blur, not on every keystroke
+  async function saveConsentOnBlur() {
+    const val = consentRef.current;
+    if (val === (draft?.consent_text || "")) return;
+    setSaving(true);
+    try {
+      await base44.functions.invoke("funnelAccess", { action: "saveDraft", funnel_id: funnel.id, consent_text: val });
+      await onChanged();
+    } catch (e) {
+      toast({ title: "Failed to save consent text", description: e.response?.data?.error || e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function createSender() {
     if (!senderForm.email.trim()) return toast({ title: "Sender email required", variant: "destructive" });
     try {
@@ -72,7 +103,7 @@ export function FunnelResourceTab({ funnel, draft, onChanged }) {
       setSenderForm({ email: "", from_name: "", reply_to: "" });
       setShowSender(false);
       await load();
-      toast({ title: "Sender created — verify it with a test send" });
+      toast({ title: "Sender created" });
     } catch (e) {
       toast({ title: "Failed", description: e.response?.data?.error || e.message, variant: "destructive" });
     }
@@ -83,7 +114,7 @@ export function FunnelResourceTab({ funnel, draft, onChanged }) {
     try {
       const res = await base44.functions.invoke("senderAccess", { action: "testSend", workspace_id: current.id, sender_id: senderId });
       if (res.data?.error) toast({ title: "Test send failed", description: res.data.error, variant: "destructive" });
-      else toast({ title: "Test sent — check your inbox", description: "Sender verified." });
+      else toast({ title: "Test sent to your inbox", description: "This confirms the platform can send. It does not verify your sender domain." });
       await load();
     } catch (e) {
       toast({ title: "Test send failed", description: e.response?.data?.error || e.message, variant: "destructive" });
@@ -156,7 +187,7 @@ export function FunnelResourceTab({ funnel, draft, onChanged }) {
                 <input type="radio" checked={deliveryMode === "immediate_plus_email"} onChange={() => saveDelivery({ delivery_mode: "immediate_plus_email" })} className="mt-1" />
                 <div>
                   <div className="text-sm font-medium text-slate-800">Immediate access + email</div>
-                  <div className="text-xs text-slate-500">Also email the resource link. Requires a verified sender.</div>
+                  <div className="text-xs text-slate-500">Also email the resource link. Requires a sender identity.</div>
                 </div>
               </label>
             </div>
@@ -169,7 +200,16 @@ export function FunnelResourceTab({ funnel, draft, onChanged }) {
                 <h3 className="font-semibold text-slate-800">Sender</h3>
                 {canAdmin && <Button size="sm" variant="outline" onClick={() => setShowSender((v) => !v)}><Plus className="w-3.5 h-3.5 mr-1" />New sender</Button>}
               </div>
-              <p className="text-xs text-slate-500 mb-4">The verified identity emails are sent from. Test-send to your own inbox to verify.</p>
+
+              {/* Provider honesty banner */}
+              {!externalProviderConfigured && (
+                <div className="flex items-start gap-2 rounded-lg bg-slate-50 border border-slate-200 p-3 mb-4">
+                  <Info className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                  <div className="text-xs text-slate-600">
+                    <span className="font-medium text-slate-700">Platform email provider.</span> Emails are sent from FunnelRoo's platform address, not your custom domain. Your sender email and reply-to are not used as the from address. A test send confirms the platform can deliver, but does not verify your sender domain. Custom-domain sending requires an external email provider (coming soon).
+                  </div>
+                </div>
+              )}
 
               {showSender && (
                 <div className="border border-slate-200 rounded-lg p-3 mb-3 space-y-2">
@@ -182,7 +222,7 @@ export function FunnelResourceTab({ funnel, draft, onChanged }) {
               )}
 
               {senders.length === 0 ? (
-                <p className="text-sm text-slate-400">No senders yet. Create one and run a test send to verify it.</p>
+                <p className="text-sm text-slate-400">No senders yet. Create one to enable email delivery.</p>
               ) : (
                 <div className="space-y-2">
                   {senders.map((s) => (
@@ -190,15 +230,17 @@ export function FunnelResourceTab({ funnel, draft, onChanged }) {
                       <input type="radio" checked={senderId === s.id} onChange={() => saveDelivery({ sender_id: s.id })} />
                       <div className="flex-1 text-sm">
                         <div className="font-medium text-slate-800">{s.from_name || s.email} <span className="text-xs text-slate-400">&lt;{s.email}&gt;</span></div>
-                        <div className="text-xs">{s.verified ? <span className="text-emerald-600 flex items-center gap-1"><BadgeCheck className="w-3 h-3" />Verified</span> : <span className="text-amber-600 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Unverified — test send required</span>}</div>
+                        <div className="text-xs text-slate-500">
+                          {s.last_test_result === "ok — platform delivery confirmed (not domain-verified)"
+                            ? <span className="text-slate-500">Test sent — platform delivery confirmed</span>
+                            : <span className="text-slate-400">Not tested</span>}
+                          {!externalProviderConfigured && <span className="text-slate-400"> · Not domain-verified</span>}
+                        </div>
                       </div>
                       {canAdmin && <Button size="sm" variant="outline" disabled={testing === s.id} onClick={() => testSend(s.id)}>{testing === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5 mr-1" />}Test send</Button>}
                     </div>
                   ))}
                 </div>
-              )}
-              {senders.length > 0 && !senders.find((s) => s.id === senderId)?.verified && (
-                <p className="text-xs text-amber-600 mt-3 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" />Select a verified sender or run a test send before publishing email delivery.</p>
               )}
             </CardContent></Card>
           )}
@@ -207,7 +249,13 @@ export function FunnelResourceTab({ funnel, draft, onChanged }) {
           <Card><CardContent className="p-5">
             <h3 className="font-semibold text-slate-800 mb-1">Marketing consent (optional)</h3>
             <p className="text-xs text-slate-500 mb-3">If added, visitors see an unchecked checkbox. A request never clears an existing unsubscribe.</p>
-            <Textarea value={draft?.consent_text || ""} onChange={(e) => saveDelivery({ consent_text: e.target.value })} rows={2} placeholder="e.g. Send me occasional tips and updates." />
+            <Textarea
+              value={consentText}
+              onChange={(e) => { setConsentText(e.target.value); consentRef.current = e.target.value; }}
+              onBlur={saveConsentOnBlur}
+              rows={2}
+              placeholder="e.g. Send me occasional tips and updates."
+            />
           </CardContent></Card>
         </>
       )}

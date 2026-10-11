@@ -3,6 +3,9 @@ import { CheckCircle2, Download, Mail, AlertTriangle, ExternalLink } from "lucid
 
 // Branded confirmation shown after an accepted resource request. Provides
 // immediate access to the resource and an accurate email-delivery status.
+// provider_accepted means the provider took the request — not confirmed
+// inbox delivery. No automatic-retry promises are shown (no retry worker
+// exists yet).
 export function Confirmation({ confirmation, primary }) {
   const resource = confirmation?.resource;
   const email = confirmation?.email;
@@ -47,12 +50,12 @@ export function Confirmation({ confirmation, primary }) {
           ) : email.state === "pending" ? (
             <p className="flex items-center gap-2 text-slate-500">
               <Mail className="w-4 h-4 text-slate-400" />
-              Your email is on the way.
+              Your email is being sent.
             </p>
           ) : (
             <p className="flex items-start gap-2 text-amber-600">
               <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-              <span>Email delivery is delayed — use the access button above. We'll retry shortly.</span>
+              <span>Email delivery encountered an issue — use the access button above to get your resource now.</span>
             </p>
           )}
         </div>

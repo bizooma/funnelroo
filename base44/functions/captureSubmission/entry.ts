@@ -337,7 +337,7 @@ async function fulfill(sr, base44, funnel, submission, origin) {
   const senderId = snapshot.sender_id || "";
   if (!job && funnel.type === "lead_magnet" && deliveryMode === "immediate_plus_email" && senderId && grant) {
     const sender = firstRecord(
-      await sr.entities.SenderIdentity.filter({ id: senderId, workspace_id: funnel.workspace_id, verified: true })
+      await sr.entities.SenderIdentity.filter({ id: senderId, workspace_id: funnel.workspace_id })
     );
     if (sender) {
       const accessUrl = `${origin}/r/${grant.access_token}`;
