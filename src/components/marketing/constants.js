@@ -1,5 +1,5 @@
 // Approved FunnelRoo brand logo (sourced from the app's published brand theme).
-export const LOGO_URL = "https://media.base44.com/images/public/6acba9de240facdd95f5665d/33e07ac7f_logo.png";
+export const LOGO_URL = "https://media.base44.com/images/public/6acba9de240facdd95f5665d/1351a4f9c_funnelroologo.png";
 
 // Same-page section anchors used by the header navigation.
 export const NAV_LINKS = [
