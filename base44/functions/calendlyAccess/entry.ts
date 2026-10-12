@@ -14,6 +14,7 @@ import {
   getConnectionAccessToken,
 } from "../../shared/booking.ts";
 import { secrets } from "base44:runtime";
+import { consumeCalendlyState, forwardCalendlyCallback } from "../../shared/calendarOAuth.ts";
 
 // Workspace-authorized Calendly OAuth connection management.
 // Handles: authorize (PKCE), callback (token exchange), status, event types,
@@ -29,10 +30,8 @@ const CALENDLY_TOKEN_URL = "https://auth.calendly.com/oauth/token";
 const CALENDLY_API_BASE = "https://api.calendly.com";
 const REQUIRED_SCOPES = ["users:read", "event_types:read", "scheduled_events:read", "webhooks:write"];
 
-// OAuth state is stored in-memory (single-use, expiring). In production this
-// would use a server-only store; for now we use a module-level Map that is
-// per-instance and ephemeral. Each authorize call creates a new state.
-const oauthStates = new Map();
+// Authorization state is durable, single-use, user/workspace-bound, and
+// inaccessible to clients in CalendlyOAuthState.
 
 function generateState() {
   return crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
@@ -68,6 +67,7 @@ function getCallbackUrl() {
 
 export default async function (req) {
   try {
+    if (req.method === "GET") return forwardCalendlyCallback(req);
     const base44 = createClientFromRequest(req);
     const sr = base44.asServiceRole;
     const body = await req.json().catch(() => ({}));
@@ -85,13 +85,14 @@ export default async function (req) {
       const codeChallenge = await generateCodeChallenge(codeVerifier);
       const callbackUrl = getCallbackUrl();
 
-      // Store state bound to user + workspace (single-use, 10 min expiry)
-      oauthStates.set(state, {
+      // Persist before redirect: the callback may reach a different worker.
+      await sr.entities.CalendlyOAuthState.create({
+        state,
         user_id: user.id,
         workspace_id: body.workspace_id,
         code_verifier: codeVerifier,
-        return_path: String(body.return_path || "/settings"),
-        created_at: Date.now(),
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        consumed: false,
       });
 
       const authUrl = `${CALENDLY_AUTH_URL}?` + new URLSearchParams({
@@ -345,22 +346,10 @@ async function handleCallback(base44, sr, body, req) {
   const state = String(body.state || "");
   const error = String(body.error || "");
 
-  if (error) return err(400, `OAuth error: ${error}`);
-
-  const stored = oauthStates.get(state);
-  if (!stored) return err(400, "Invalid or expired authorization state");
-  oauthStates.delete(state); // single-use
-
-  // Check expiry (10 min)
-  if (Date.now() - stored.created_at > 10 * 60 * 1000) {
-    return err(400, "Authorization state expired. Please try again.");
-  }
-
-  // Verify the user is still authenticated and authorized for this workspace
-  const { user, membership } = await requireMembership(base44, stored.workspace_id, ["owner", "admin"]);
-  if (user.id !== stored.user_id) {
-    return err(403, "Authorization state does not match the current user");
-  }
+  if (error) return err(400, "Calendly authorization was not completed. Please try again.");
+  if (!code || code.length > 4096) return err(400, "Missing or invalid authorization code");
+  const stored = await consumeCalendlyState(base44, state);
+  const { user } = await requireMembership(base44, stored.workspace_id, ["owner", "admin"]);
 
   const clientId = secrets.get("CALENDLY_CLIENT_ID");
   const clientSecret = secrets.get("CALENDLY_CLIENT_SECRET");
@@ -399,7 +388,7 @@ async function handleCallback(base44, sr, body, req) {
   const userUri = calUser.uri || "";
   const userEmail = calUser.email || "";
   const userName = calUser.name || "";
-  const orgUri = calUser.current_organization?.uri || "";
+  const orgUri = typeof calUser.current_organization === "string" ? calUser.current_organization : calUser.current_organization?.uri || "";
 
   // Prevent one provider user identity from being bound to multiple workspaces
   const existingByIdentity = firstRecord(
@@ -540,7 +529,7 @@ async function fetchCalendlyEventTypes(sr, connection) {
 }
 
 async function createCalendlyWebhook(sr, connection, accessToken) {
-  const webhookUrl = `${PUBLISHED_ORIGIN}/functions/bookingWebhook`;
+  const webhookUrl = "https://funnel-roo-flow.base44.app/functions/bookingWebhook";
   const orgUri = connection.provider_organization_uri;
   const userUri = connection.provider_user_uri;
 
@@ -556,6 +545,7 @@ async function createCalendlyWebhook(sr, connection, accessToken) {
       organization: orgUri,
       user: userUri,
       scope: "user",
+      signing_key: secrets.get("CALENDLY_WEBHOOK_SIGNING_KEY"),
     }),
     signal: AbortSignal.timeout(15000),
   });

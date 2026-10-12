@@ -15,6 +15,7 @@ import {
   Save, Loader2, Plus, Trash2, Upload, Users, FileText, CreditCard, Plug, Shield, Copy, Check,
 } from "lucide-react";
 import CalendlyTab from "@/components/settings/CalendlyTab";
+import CalendlyCallback from "@/components/settings/CalendlyCallback";
 
 const TABS = [
   { id: "brief", label: "Business brief", icon: FileText },
@@ -26,7 +27,7 @@ const TABS = [
 
 export default function Settings() {
   const { current, loading, canAdmin } = useWorkspace();
-  const [tab, setTab] = useState("brief");
+  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get("tab") === "integrations" ? "integrations" : "brief");
 
   if (loading) return <AppShell><div className="p-8"><div className="w-8 h-8 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin" /></div></AppShell>;
   if (!current) return null;
@@ -47,6 +48,7 @@ export default function Settings() {
           ))}
         </div>
 
+        <CalendlyCallback />
         {tab === "brief" && <BriefTab />}
         {tab === "team" && <TeamTab canAdmin={canAdmin} />}
         {tab === "integrations" && <CalendlyTab />}

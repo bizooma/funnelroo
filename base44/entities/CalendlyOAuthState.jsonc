@@ -1,0 +1,59 @@
+{
+  "name": "CalendlyOAuthState",
+  "type": "object",
+  "properties": {
+    "state": {
+      "type": "string"
+    },
+    "user_id": {
+      "type": "string"
+    },
+    "workspace_id": {
+      "type": "string"
+    },
+    "code_verifier": {
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "consumed": {
+      "type": "boolean",
+      "default": false
+    },
+    "claim_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "state",
+    "user_id",
+    "workspace_id",
+    "code_verifier",
+    "expires_at",
+    "consumed"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    }
+  }
+}
