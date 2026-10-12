@@ -59,7 +59,7 @@ async function generateCodeChallenge(verifier) {
 // OAuth app settings. We pin it to the published app domain (the same origin
 // used for webhook subscriptions) so the callback is stable regardless of
 // which URL the builder is viewing the app from.
-const PUBLISHED_ORIGIN = "https://funnel-roo-flow.base44.app";
+const PUBLISHED_ORIGIN = "https://funnelroo.com";
 const CALENDLY_CALLBACK_URL = `${PUBLISHED_ORIGIN}/functions/calendlyAccess`;
 
 function getCallbackUrl() {
@@ -540,8 +540,7 @@ async function fetchCalendlyEventTypes(sr, connection) {
 }
 
 async function createCalendlyWebhook(sr, connection, accessToken) {
-  const origin = "https://funnel-roo-flow.base44.app";
-  const webhookUrl = `${origin}/functions/bookingWebhook`;
+  const webhookUrl = `${PUBLISHED_ORIGIN}/functions/bookingWebhook`;
   const orgUri = connection.provider_organization_uri;
   const userUri = connection.provider_user_uri;
 
