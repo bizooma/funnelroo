@@ -55,9 +55,15 @@ async function generateCodeChallenge(verifier) {
     .replace(/=/g, "");
 }
 
-function getCallbackUrl(req) {
-  const origin = new URL(req.url).origin;
-  return `${origin}/functions/calendlyAccess`;
+// The OAuth redirect URI must exactly match a URI registered in the Calendly
+// OAuth app settings. We pin it to the published app domain (the same origin
+// used for webhook subscriptions) so the callback is stable regardless of
+// which URL the builder is viewing the app from.
+const PUBLISHED_ORIGIN = "https://funnel-roo-flow.base44.app";
+const CALENDLY_CALLBACK_URL = `${PUBLISHED_ORIGIN}/functions/calendlyAccess`;
+
+function getCallbackUrl() {
+  return CALENDLY_CALLBACK_URL;
 }
 
 export default async function (req) {
@@ -77,7 +83,7 @@ export default async function (req) {
       const state = generateState();
       const codeVerifier = generateCodeVerifier();
       const codeChallenge = await generateCodeChallenge(codeVerifier);
-      const callbackUrl = getCallbackUrl(req);
+      const callbackUrl = getCallbackUrl();
 
       // Store state bound to user + workspace (single-use, 10 min expiry)
       oauthStates.set(state, {
@@ -358,7 +364,7 @@ async function handleCallback(base44, sr, body, req) {
 
   const clientId = secrets.get("CALENDLY_CLIENT_ID");
   const clientSecret = secrets.get("CALENDLY_CLIENT_SECRET");
-  const callbackUrl = getCallbackUrl(req);
+  const callbackUrl = getCallbackUrl();
 
   // Exchange code for tokens
   const tokenRes = await fetch(CALENDLY_TOKEN_URL, {
