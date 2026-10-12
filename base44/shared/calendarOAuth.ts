@@ -24,7 +24,9 @@ export async function consumeCalendlyState(base44, state) {
 export function forwardCalendlyCallback(req) {
   const reqUrl = new URL(req.url);
   const params = reqUrl.searchParams;
-  const target = new URL("/settings?tab=integrations", reqUrl.origin);
+  // The runtime request origin can be an internal dispatcher, not the
+  // browser's public origin. Always return to the live site's auth session.
+  const target = new URL("https://funnelroo.com/settings?tab=integrations");
   for (const key of ["code", "state", "error"]) {
     const value = params.get(key);
     if (value && value.length <= 4096) target.searchParams.set(`calendly_${key}`, value);
