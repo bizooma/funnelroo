@@ -32,6 +32,7 @@ import { secrets } from "base44:runtime";
 
 const DEFAULT_LOOKBACK_HOURS = 24;
 const MAX_LOOKBACK_HOURS = 720; // 30 days max recovery window
+const FORWARD_WINDOW_HOURS = 720; // 30 days forward to catch newly booked future appointments
 const API_PAGE_SIZE = 50;
 
 export default async function (req) {
@@ -98,7 +99,11 @@ async function reconcileConnection(sr, connection) {
 
   const maxLookback = new Date(Date.now() - MAX_LOOKBACK_HOURS * 3600 * 1000);
   if (lookbackStart < maxLookback) lookbackStart = maxLookback;
-  const lookbackEnd = new Date();
+  const lookbackEnd = new Date(); // cursor checkpoint (last time we checked)
+  // Query forward to catch newly booked future appointments — a meeting
+  // booked today for next week has a start time in the future, so the
+  // API query must extend past now to include it.
+  const queryMaxStart = new Date(Date.now() + FORWARD_WINDOW_HOURS * 3600 * 1000);
 
   const accessToken = await getConnectionAccessToken(sr, connection.id);
   if (!accessToken) {
@@ -112,7 +117,7 @@ async function reconcileConnection(sr, connection) {
   // Fetch scheduled events (active and canceled) from Calendly API
   const userUri = connection.provider_user_uri;
   const minStart = lookbackStart.toISOString();
-  const maxStart = lookbackEnd.toISOString();
+  const maxStart = queryMaxStart.toISOString();
 
   // Fetch active events
   const activeEvents = await fetchAllScheduledEvents(accessToken, userUri, minStart, maxStart, "active");

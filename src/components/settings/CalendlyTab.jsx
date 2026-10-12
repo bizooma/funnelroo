@@ -1,20 +1,26 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useWorkspace } from "@/lib/workspaceContext";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/use-toast";
 import {
-  Loader2, Plug, Check, X, RefreshCw, AlertCircle, ExternalLink, Calendar,
+  Loader2, Plug, Check, AlertCircle, RefreshCw, ExternalLink, Calendar,
+  Users, CalendarCheck, Wrench, ChevronDown, ChevronUp,
 } from "lucide-react";
+import { CalendlyLimitationNotice } from "./CalendlyLimitationNotice";
 
 export function CalendlyTab() {
   const { current, canAdmin } = useWorkspace();
   const [status, setStatus] = useState(null);
   const [eventTypes, setEventTypes] = useState([]);
+  const [followUpStatus, setFollowUpStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
 
   async function load() {
     if (!current) return;
@@ -25,9 +31,13 @@ export function CalendlyTab() {
       if (res.data?.connected) {
         const etRes = await base44.functions.invoke("calendlyAccess", { action: "listEventTypes", workspace_id: current.id });
         setEventTypes(etRes.data?.event_types || []);
+        if (res.data?.outage_hold) {
+          const fuRes = await base44.functions.invoke("calendlyAccess", { action: "getFollowUpStatus", workspace_id: current.id });
+          setFollowUpStatus(fuRes.data);
+        }
       }
     } catch (e) {
-      toast({ title: "Could not load Calendly status", description: e.response?.data?.error || e.message, variant: "destructive" });
+      toast({ title: "Could not load calendar status", description: e.response?.data?.error || e.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -39,40 +49,55 @@ export function CalendlyTab() {
     if (!current) return;
     setConnecting(true);
     try {
-      const res = await base44.functions.invoke("calendlyAccess", {
-        action: "authorize",
-        workspace_id: current.id,
-        return_path: "/settings",
-      });
-      if (res.data?.auth_url) {
-        window.location.href = res.data.auth_url;
-      }
+      const res = await base44.functions.invoke("calendlyAccess", { action: "authorize", workspace_id: current.id });
+      if (res.data?.auth_url) window.location.href = res.data.auth_url;
     } catch (e) {
-      toast({ title: "Could not start Calendly connection", description: e.response?.data?.error || e.message, variant: "destructive" });
+      toast({ title: "Could not start connection", description: e.response?.data?.error || e.message, variant: "destructive" });
     } finally {
       setConnecting(false);
     }
   }
 
-  async function syncEventTypes() {
+  async function refreshAppointmentTypes() {
     setSyncing(true);
     try {
       const res = await base44.functions.invoke("calendlyAccess", { action: "syncEventTypes", workspace_id: current.id });
       setEventTypes(res.data?.event_types || []);
-      toast({ title: `Synced ${res.data?.synced || 0} event types` });
+      toast({ title: `Refreshed ${res.data?.synced || 0} appointment types` });
       load();
     } catch (e) {
-      toast({ title: "Sync failed", description: e.response?.data?.error || e.message, variant: "destructive" });
+      toast({ title: "Refresh failed", description: e.response?.data?.error || e.message, variant: "destructive" });
     } finally {
       setSyncing(false);
     }
   }
 
+  async function checkConnection() {
+    setChecking(true);
+    try {
+      const res = await base44.functions.invoke("calendlyAccess", { action: "checkConnection", workspace_id: current.id });
+      if (res.data?.connected === false && res.data?.reason === "expired_authorization") {
+        toast({ title: "Reconnect required", description: "Your Calendly authorization has expired.", variant: "destructive" });
+      } else if (res.data?.webhook_health === "healthy") {
+        toast({ title: "Connection verified", description: "Instant booking updates are active." });
+      } else if (res.data?.plan_supports_webhooks === false) {
+        toast({ title: "Connection verified", description: "Instant booking updates remain unavailable on your current Calendly plan." });
+      } else {
+        toast({ title: "Connection checked", description: "Instant booking updates are still unavailable. Try again later." });
+      }
+      load();
+    } catch (e) {
+      toast({ title: "Check failed", description: e.response?.data?.error || e.message, variant: "destructive" });
+    } finally {
+      setChecking(false);
+    }
+  }
+
   async function disconnect() {
-    if (!confirm("Disconnect Calendly? Automatic booking tracking will stop. Historical appointments are preserved.")) return;
+    if (!confirm("Disconnect your calendar? Automatic booking tracking will stop. Historical appointments are preserved.")) return;
     try {
       await base44.functions.invoke("calendlyAccess", { action: "disconnect", workspace_id: current.id });
-      toast({ title: "Calendly disconnected" });
+      toast({ title: "Calendar disconnected" });
       load();
     } catch (e) {
       toast({ title: "Failed", description: e.response?.data?.error || e.message, variant: "destructive" });
@@ -83,66 +108,93 @@ export function CalendlyTab() {
 
   const connected = status?.connected;
   const configured = status?.configured;
+  const instantUpdates = status?.webhook_health === "healthy";
+  const freePlan = status?.webhook_health === "missing" && status?.plan_supports_webhooks === false;
+  const setupFailed = status?.webhook_health === "failed";
+  const reconnectRequired = status?.status === "reconnect_required";
+  const followUpPaused = status?.outage_hold;
+  const backgroundChecksWorking = status?.last_sync_status === "success" || status?.last_sync_status === "partial";
+  const noCheckYet = !status?.last_sync_status || status?.last_sync_status === "never";
+  const lastCheck = status?.last_sync_at ? new Date(status.last_sync_at).toLocaleString() : null;
+
+  // Status badge — "Connected · Limited booking updates" when updates are limited
+  const badge = !connected
+    ? status?.status === "link_only"
+      ? { label: "Link-only", cls: "bg-slate-100 text-slate-500", icon: null }
+      : { label: "Not connected", cls: "bg-slate-100 text-slate-400", icon: null }
+    : reconnectRequired
+      ? { label: "Reconnect required", cls: "bg-amber-100 text-amber-700", icon: AlertCircle }
+      : instantUpdates
+        ? { label: "Connected", cls: "bg-emerald-100 text-emerald-700", icon: Check }
+        : { label: "Connected · Limited booking updates", cls: "bg-amber-100 text-amber-700", icon: AlertCircle };
 
   return (
     <div className="space-y-4">
+      {/* Connection card */}
       <Card>
         <CardContent className="p-5">
           <div className="flex items-start justify-between">
             <div>
               <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-indigo-600" /> Calendly
+                <Calendar className="w-4 h-4 text-indigo-600" /> Calendar
               </h3>
               <p className="text-xs text-slate-500 mt-1 max-w-md">
-                Connect your Calendly account to automatically track confirmed appointments, stop nurture sequences on booking, and report on conversion.
+                Connect your Calendly account to track confirmed appointments, stop follow-up emails on booking, and report on conversion.
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              {connected ? (
-                <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 flex items-center gap-1">
-                  <Check className="w-3 h-3" /> Connected
-                </span>
-              ) : status?.status === "link_only" ? (
-                <span className="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-500">Link-only</span>
-              ) : (
-                <span className="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-400">Not connected</span>
-              )}
-            </div>
+            <span className={`text-xs px-2.5 py-1 rounded-full flex items-center gap-1 ${badge.cls}`}>
+              {badge.icon && <badge.icon className="w-3 h-3" />}
+              {badge.label}
+            </span>
           </div>
 
-          {/* Connection details */}
+          {/* Four concerns separated */}
           {connected && (
-            <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-xs text-slate-400">Account</p>
-                <p className="text-slate-700">{status.provider_user_name || "—"}</p>
-                <p className="text-xs text-slate-400">{status.provider_user_email}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400">Webhook health</p>
-                <p className="flex items-center gap-1">
-                  {status.webhook_health === "healthy" ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <AlertCircle className="w-3.5 h-3.5 text-amber-500" />}
-                  <span className="text-slate-600 capitalize">{status.webhook_health || "unknown"}</span>
-                </p>
-                {!status.plan_supports_webhooks && <p className="text-xs text-amber-600 mt-0.5">Calendly paid plan required for webhooks</p>}
-              </div>
-              <div>
-                <p className="text-xs text-slate-400">Last sync</p>
-                <p className="text-slate-600 text-xs">{status.last_sync_at ? new Date(status.last_sync_at).toLocaleString() : "Never"}</p>
-              </div>
-              {status.outage_hold && (
-                <div>
-                  <p className="text-xs text-slate-400">Status</p>
-                  <p className="text-amber-600 text-xs flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Outage hold active</p>
-                </div>
-              )}
+            <div className="mt-4 space-y-3">
+              <StatusRow label="Account authorization">
+                {reconnectRequired ? (
+                  <span className="flex items-center gap-1.5 text-amber-600"><AlertCircle className="w-3.5 h-3.5" /> Expired — reconnect required</span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-slate-700"><Check className="w-3.5 h-3.5 text-emerald-500" /> {status.provider_user_name || "Connected"} <span className="text-xs text-slate-400">{status.provider_user_email}</span></span>
+                )}
+              </StatusRow>
+
+              <StatusRow label="Instant booking updates">
+                {instantUpdates ? (
+                  <span className="flex items-center gap-1.5 text-emerald-600"><Check className="w-3.5 h-3.5" /> Active</span>
+                ) : freePlan ? (
+                  <span className="flex items-center gap-1.5 text-amber-600"><AlertCircle className="w-3.5 h-3.5" /> Unavailable — Calendly free plan</span>
+                ) : setupFailed ? (
+                  <span className="flex items-center gap-1.5 text-amber-600"><AlertCircle className="w-3.5 h-3.5" /> Setup did not complete — try checking your connection</span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-amber-600"><AlertCircle className="w-3.5 h-3.5" /> Unavailable</span>
+                )}
+              </StatusRow>
+
+              <StatusRow label="Appointment checks">
+                {noCheckYet ? (
+                  <span className="text-slate-500">No appointment check completed yet</span>
+                ) : backgroundChecksWorking ? (
+                  <span className="text-slate-600">Last check: {lastCheck}</span>
+                ) : (
+                  <span className="text-amber-600">Last check did not complete — try checking your connection</span>
+                )}
+              </StatusRow>
+
+              <StatusRow label="Booking follow-up">
+                {followUpPaused ? (
+                  <span className="flex items-center gap-1.5 text-amber-600"><AlertCircle className="w-3.5 h-3.5" /> Paused</span>
+                ) : (
+                  <span className="text-slate-600">Active</span>
+                )}
+              </StatusRow>
             </div>
           )}
 
           {/* Actions */}
-          <div className="mt-4 flex items-center gap-2">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             {!configured && (
-              <p className="text-xs text-amber-600 mr-2">Calendly credentials not configured. Add them in the app Secrets page to enable OAuth connection.</p>
+              <p className="text-xs text-amber-600">Calendar credentials not configured. Add them in the app Secrets page.</p>
             )}
             {!connected && configured && canAdmin && (
               <Button onClick={connect} disabled={connecting}>
@@ -152,24 +204,90 @@ export function CalendlyTab() {
             )}
             {connected && canAdmin && (
               <>
-                <Button variant="outline" size="sm" onClick={syncEventTypes} disabled={syncing}>
+                <Button variant="outline" size="sm" onClick={checkConnection} disabled={checking}>
+                  {checking ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5 mr-1.5" />}
+                  {checking ? "Checking..." : "Check connection"}
+                </Button>
+                <Button variant="outline" size="sm" onClick={refreshAppointmentTypes} disabled={syncing}>
                   {syncing ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}
-                  {syncing ? "Syncing..." : "Sync event types"}
+                  {syncing ? "Refreshing..." : "Refresh appointment types"}
                 </Button>
-                <Button variant="outline" size="sm" onClick={disconnect}>
-                  Disconnect
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/contacts"><Users className="w-3.5 h-3.5 mr-1.5" /> View contacts</Link>
                 </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/appointments"><CalendarCheck className="w-3.5 h-3.5 mr-1.5" /> Record appointment</Link>
+                </Button>
+                {freePlan && (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href="https://calendly.com/pricing" target="_blank" rel="noopener noreferrer"><ExternalLink className="w-3.5 h-3.5 mr-1.5" /> View Calendly plans</a>
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={disconnect}>Disconnect</Button>
               </>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Event types */}
+      {/* Free-plan limitation notice — only when cause is established */}
+      {connected && freePlan && !reconnectRequired && (
+        <CalendlyLimitationNotice
+          followUpPaused={followUpPaused}
+          backgroundChecksWorking={backgroundChecksWorking}
+          lastCheck={lastCheck}
+          affectedFunnels={followUpStatus?.affected}
+        />
+      )}
+
+      {/* Reconnect required notice */}
+      {connected && reconnectRequired && (
+        <Card className="border-amber-200">
+          <CardContent className="p-5">
+            <h3 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-500" /> Reconnect your calendar
+            </h3>
+            <p className="text-sm text-slate-600 mb-3">
+              Your Calendly authorization has expired. FunnelRoo can't check for new
+              appointments or update booking information until you reconnect.
+            </p>
+            {canAdmin && (
+              <Button onClick={connect} disabled={connecting}>
+                {connecting ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Plug className="w-4 h-4 mr-1.5" />}
+                {connecting ? "Connecting..." : "Reconnect Calendly"}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Setup failure notice (not free plan, not expired) */}
+      {connected && setupFailed && !reconnectRequired && !freePlan && (
+        <Card className="border-amber-200">
+          <CardContent className="p-5">
+            <h3 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-500" /> Booking updates did not finish setting up
+            </h3>
+            <p className="text-sm text-slate-600 mb-3">
+              Your account is connected, but instant booking updates could not be set
+              up. This is often temporary. Try checking your connection to repair the
+              setup.
+            </p>
+            {canAdmin && (
+              <Button variant="outline" size="sm" onClick={checkConnection} disabled={checking}>
+                {checking ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5 mr-1.5" />}
+                {checking ? "Checking..." : "Check connection"}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Appointment types */}
       {connected && eventTypes.length > 0 && (
         <Card>
           <CardContent className="p-5">
-            <h3 className="font-semibold text-slate-800 mb-3">Event types</h3>
+            <h3 className="font-semibold text-slate-800 mb-3">Appointment types</h3>
             <div className="space-y-2">
               {eventTypes.map((et) => (
                 <div key={et.id} className="flex items-center justify-between border border-slate-200 rounded-lg p-3">
@@ -179,7 +297,7 @@ export function CalendlyTab() {
                       <span>{et.duration_minutes} min</span>
                       <span>·</span>
                       <span className={et.supported ? "text-emerald-600" : "text-amber-600"}>
-                        {et.supported ? "Individual (supported)" : "Group/round-robin (not supported)"}
+                        {et.supported ? "Individual" : "Group/round-robin (not supported)"}
                       </span>
                     </div>
                   </div>
@@ -193,21 +311,59 @@ export function CalendlyTab() {
         </Card>
       )}
 
-      {/* Link-only mode notice */}
+      {/* Link-only mode */}
       {!connected && (
         <Card>
           <CardContent className="p-5">
             <h3 className="font-semibold text-slate-800 mb-1">Link-only mode</h3>
             <p className="text-xs text-slate-500 mb-3">
-              Without connecting your Calendly account, you can still paste a scheduling URL in each funnel's Booking tab.
-              Bookings won't be tracked automatically — you'll need to record them manually.
+              Without connecting your Calendly account, you can still paste a
+              scheduling URL in each funnel's Booking tab. Bookings won't be tracked
+              automatically — you'll need to record them manually.
             </p>
             <p className="text-xs text-slate-400">
-              To enable automatic booking tracking, connect your account above. Calendly requires a paid plan for webhook-based automatic confirmation.
+              To enable automatic booking tracking, connect your account above.
+              Calendly requires a paid plan for instant booking updates.
             </p>
           </CardContent>
         </Card>
       )}
+
+      {/* Support details (collapsible, no secrets) */}
+      {connected && (
+        <Card>
+          <CardContent className="p-5">
+            <button
+              onClick={() => setShowSupport(!showSupport)}
+              className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700"
+            >
+              {showSupport ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              Support details
+            </button>
+            {showSupport && (
+              <div className="mt-3 space-y-1 text-xs text-slate-500 font-mono">
+                <div>Connection status: {status?.status || "—"}</div>
+                <div>Booking updates: {status?.webhook_health || "—"}</div>
+                <div>Plan supports instant updates: {String(status?.plan_supports_webhooks ?? "—")}</div>
+                <div>Last appointment check: {status?.last_sync_at ? new Date(status.last_sync_at).toLocaleString() : "—"}</div>
+                <div>Check status: {status?.last_sync_status || "—"}</div>
+                {status?.last_sync_error && <div>Last error: {status.last_sync_error}</div>}
+                <div>Follow-up paused: {String(status?.outage_hold ?? false)}</div>
+                <div>Generation: {status?.generation || "—"}</div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function StatusRow({ label, children }) {
+  return (
+    <div className="flex items-start gap-2">
+      <div className="text-xs text-slate-400 w-40 shrink-0 pt-0.5">{label}</div>
+      <div className="text-sm flex-1">{children}</div>
     </div>
   );
 }

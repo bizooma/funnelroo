@@ -361,6 +361,139 @@ export default async function (req) {
       return ok({ status: "link_only" });
     }
 
+    // ---- checkConnection: verify capabilities and repair/establish subscription ----
+    if (action === "checkConnection") {
+      const { user } = await requireMembership(base44, body.workspace_id, ["owner", "admin"]);
+      let connection = firstRecord(
+        await sr.entities.CalendarConnection.filter({ workspace_id: body.workspace_id, provider: "calendly", status: { $in: ["connected", "reconnect_required"] } })
+      );
+      if (!connection) return ok({ connected: false, status: "link_only" });
+
+      if (!isCalendlyConfigured()) {
+        return err(503, "Calendly credentials not configured");
+      }
+
+      // Verify token works
+      const token = await getConnectionAccessToken(sr, connection.id);
+      if (!token) {
+        await sr.entities.CalendarConnection.update(connection.id, {
+          status: "reconnect_required",
+          webhook_health: "missing",
+        });
+        return ok({ connected: false, status: "reconnect_required", reason: "expired_authorization" });
+      }
+
+      // Verify user identity at provider
+      let tokenValid = false;
+      try {
+        const userRes = await fetch(`${CALENDLY_API_BASE}/users/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(15000),
+        });
+        tokenValid = userRes.ok;
+      } catch {}
+
+      if (!tokenValid) {
+        await sr.entities.CalendarConnection.update(connection.id, {
+          status: "reconnect_required",
+          webhook_health: "missing",
+        });
+        return ok({ connected: false, status: "reconnect_required", reason: "expired_authorization" });
+      }
+
+      // Restore connected status if it was reconnect_required
+      if (connection.status === "reconnect_required") {
+        await sr.entities.CalendarConnection.update(connection.id, { status: "connected" });
+      }
+
+      // Check/repair webhook subscription without creating duplicates
+      let webhookHealth = connection.webhook_health;
+      let planSupportsWebhooks = connection.plan_supports_webhooks;
+      let subUri = connection.webhook_subscription_uri;
+
+      if (subUri) {
+        // Verify existing subscription is still active at provider
+        try {
+          const subRes = await fetch(subUri, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(15000),
+          });
+          if (subRes.ok) {
+            webhookHealth = "healthy";
+            planSupportsWebhooks = true;
+          } else if (subRes.status === 404) {
+            // Subscription was deleted at provider — clear and try to recreate
+            subUri = "";
+            await sr.entities.CalendarConnection.update(connection.id, { webhook_subscription_uri: "", webhook_subscription_id: "" });
+            webhookHealth = "missing";
+          } else {
+            webhookHealth = "unknown";
+          }
+        } catch {
+          webhookHealth = "unknown";
+        }
+      }
+
+      // Create subscription if missing (after upgrade or if it was deleted)
+      if (!subUri) {
+        try {
+          await createCalendlyWebhook(sr, connection, token);
+          webhookHealth = "healthy";
+          planSupportsWebhooks = true;
+        } catch (e) {
+          const msg = String(e?.message || e);
+          if (msg.includes("402") || msg.includes("paid") || msg.includes("upgrade")) {
+            webhookHealth = "missing";
+            planSupportsWebhooks = false;
+          } else {
+            webhookHealth = "failed";
+          }
+        }
+      }
+
+      await sr.entities.CalendarConnection.update(connection.id, {
+        webhook_health: webhookHealth,
+        plan_supports_webhooks: planSupportsWebhooks,
+        last_sync_at: new Date().toISOString(),
+      });
+
+      return ok({
+        connected: true,
+        status: "connected",
+        webhook_health: webhookHealth,
+        plan_supports_webhooks: planSupportsWebhooks,
+        provider_user_email: connection.provider_user_email,
+        provider_user_name: connection.provider_user_name,
+      });
+    }
+
+    // ---- getFollowUpStatus: affected funnels/sequences when follow-up is paused ----
+    if (action === "getFollowUpStatus") {
+      await requireMembership(base44, body.workspace_id);
+      const connection = firstRecord(
+        await sr.entities.CalendarConnection.filter({ workspace_id: body.workspace_id, provider: "calendly" })
+      );
+      const paused = !!(connection?.outage_hold);
+      if (!paused) return ok({ paused: false, affected: [] });
+
+      // Find active enrollments and their funnel/sequence names
+      const enrollments = asArray(
+        await sr.entities.NurtureEnrollment.filter({ workspace_id: body.workspace_id, state: "active" }, { limit: 500 })
+      );
+      const sequenceIds = [...new Set(enrollments.map((e) => e.sequence_id).filter(Boolean))];
+      const affected = [];
+      for (const seqId of sequenceIds) {
+        const seq = firstRecord(await sr.entities.NurtureSequence.filter({ id: seqId }));
+        let funnelName = "";
+        if (seq?.funnel_id) {
+          const funnel = firstRecord(await sr.entities.Funnel.filter({ id: seq.funnel_id }));
+          funnelName = funnel?.name || "";
+        }
+        affected.push({ funnel_name: funnelName, sequence_name: seq?.name || "" });
+      }
+      return ok({ paused: true, affected, enrollment_count: enrollments.length });
+    }
+
     return err(400, `Unknown action: ${action}`);
   } catch (e) {
     if (e instanceof HttpError) return err(e.status, e.message);
