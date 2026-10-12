@@ -98,6 +98,46 @@
     "plan_supports_webhooks": {
       "type": "boolean",
       "default": false
+    },
+    "booking_update_restriction": {
+      "type": "string",
+      "enum": [
+        "free_plan",
+        "plan_restriction",
+        "unknown",
+        "none"
+      ]
+    },
+    "booking_update_restriction_checked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "booking_check_state": {
+      "type": "object"
+    },
+    "last_booking_check_success_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_booking_check_attempt_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "booking_check_status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "partial",
+        "failed",
+        "never"
+      ]
+    },
+    "booking_check_error": {
+      "type": "string"
+    },
+    "last_appointment_types_refresh_at": {
+      "type": "string",
+      "format": "date-time"
     }
   },
   "required": [

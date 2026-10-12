@@ -11,6 +11,7 @@ import {
   Loader2, ChevronLeft, ChevronRight, ExternalLink, User,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import ManualAppointmentForm from "@/components/settings/ManualAppointmentForm";
 
 const VIEWS = [
   { id: "upcoming", label: "Upcoming" },
@@ -29,6 +30,7 @@ export function Appointments() {
   const [search, setSearch] = useState("");
   const [hasMore, setHasMore] = useState(false);
   const [cursor, setCursor] = useState("");
+  const [recording, setRecording] = useState(() => new URLSearchParams(window.location.search).get("record") === "1");
 
   const load = useCallback(async () => {
     if (!current) return;
@@ -63,6 +65,8 @@ export function Appointments() {
   return (
     <AppShell>
       <div className="p-8 max-w-6xl">
+        <ManualAppointmentForm open={recording} onClose={() => {setRecording(false); window.history.replaceState(null, "", window.location.pathname);}} onSaved={load} />
+        <Button variant="outline" className="float-right" onClick={() => setRecording(true)}>Record appointment</Button>
         <h1 className="text-2xl font-bold text-slate-900 mb-1">Appointments</h1>
         <p className="text-sm text-slate-500 mb-6">Track confirmed appointments, attendance, and sales outcomes.</p>
 

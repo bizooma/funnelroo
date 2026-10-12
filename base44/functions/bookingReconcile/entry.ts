@@ -16,11 +16,12 @@ import {
   normalizeEmail,
   upsertBooking,
   resolveFunnelLead,
-  releaseOutageHold,
+  linkRescheduleChain,
   getConnectionAccessToken,
   isCalendlyConfigured,
 } from "../../shared/booking.ts";
-import { secrets } from "base44:runtime";
+import { runAppointmentCheck } from "../../shared/appointmentChecks.ts";
+import { runBookingFixtures } from "../../shared/bookingFixtures.ts";
 
 // Scheduled reconciliation: fetches scheduled events from the Calendly API for
 // the lookback window, compares against stored Booking records, and processes
@@ -30,10 +31,8 @@ import { secrets } from "base44:runtime";
 //
 // Called by the BookingReconcile workflow every 15 minutes.
 
-const DEFAULT_LOOKBACK_HOURS = 24;
-const MAX_LOOKBACK_HOURS = 720; // 30 days max recovery window
-const FORWARD_WINDOW_HOURS = 720; // 30 days forward to catch newly booked future appointments
-const API_PAGE_SIZE = 50;
+// Each invocation consumes bounded pages and persists unfinished work.
+// Future appointment discovery has no maximum date.
 
 export default async function (req) {
   try {
@@ -42,7 +41,12 @@ export default async function (req) {
     const body = await req.json().catch(() => ({}));
 
     // This is a scheduled function — verify it's called by the workflow system
-    const isSystem = body._system === true || body._workflow === true;
+    const user = await base44.auth.me();
+    if (body.action === "verifyFixtures") {
+      if (user?.role !== "admin") return err(403, "Admin access required");
+      return ok(await runBookingFixtures(ingestCheckedAppointment));
+    }
+    const isSystem = user?.role === "admin" && (body._system === true || body._workflow === true);
     if (!isSystem) {
       return err(403, "Reconciliation must be triggered by the scheduled workflow");
     }
@@ -75,167 +79,36 @@ export default async function (req) {
 }
 
 async function reconcileConnection(sr, connection) {
-  const workspaceId = connection.workspace_id;
-  let processed = 0;
-  let errors = 0;
-
-  if (!isCalendlyConfigured()) {
+  if (!isCalendlyConfigured()) return {complete: false, error: "not_configured"};
+  const token = await getConnectionAccessToken(sr, connection.id);
+  if (!token) {
     await sr.entities.CalendarConnection.update(connection.id, {
-      last_sync_at: new Date().toISOString(),
-      last_sync_status: "success",
-      last_sync_cursor: new Date().toISOString(),
-      last_sync_error: "",
+      booking_check_status: "failed", booking_check_error: "Authorization needs renewal",
+      last_booking_check_attempt_at: new Date().toISOString(),
     });
-    return { processed: 0, mock: true };
+    return {complete: false, error: "authorization_required"};
   }
-
-  // Determine lookback from last successful sync checkpoint
-  let lookbackStart;
-  if (connection.last_sync_at && connection.last_sync_cursor && connection.last_sync_status === "success") {
-    lookbackStart = new Date(connection.last_sync_cursor);
-  } else {
-    lookbackStart = new Date(Date.now() - DEFAULT_LOOKBACK_HOURS * 3600 * 1000);
-  }
-
-  const maxLookback = new Date(Date.now() - MAX_LOOKBACK_HOURS * 3600 * 1000);
-  if (lookbackStart < maxLookback) lookbackStart = maxLookback;
-  const lookbackEnd = new Date(); // cursor checkpoint (last time we checked)
-  // Query forward to catch newly booked future appointments — a meeting
-  // booked today for next week has a start time in the future, so the
-  // API query must extend past now to include it.
-  const queryMaxStart = new Date(Date.now() + FORWARD_WINDOW_HOURS * 3600 * 1000);
-
-  const accessToken = await getConnectionAccessToken(sr, connection.id);
-  if (!accessToken) {
-    await sr.entities.CalendarConnection.update(connection.id, {
-      last_sync_status: "failed",
-      last_sync_error: "No valid access token — reconnect required",
-    });
-    return { processed: 0, errors: 1, error: "no_token" };
-  }
-
-  // Fetch scheduled events (active and canceled) from Calendly API
-  const userUri = connection.provider_user_uri;
-  const minStart = lookbackStart.toISOString();
-  const maxStart = queryMaxStart.toISOString();
-
-  // Fetch active events
-  const activeEvents = await fetchAllScheduledEvents(accessToken, userUri, minStart, maxStart, "active");
-  // Fetch canceled events
-  const canceledEvents = await fetchAllScheduledEvents(accessToken, userUri, minStart, maxStart, "canceled");
-
-  // Process each active event's invitees
-  for (const event of activeEvents) {
-    try {
-      const invitees = await fetchEventInvitees(accessToken, event.uri);
-      for (const invitee of invitees) {
-        const existing = firstRecord(
-          await sr.entities.Booking.filter({
-            workspace_id: workspaceId,
-            connection_id: connection.id,
-            provider_invitee_uri: invitee.uri,
-          })
-        );
-        if (!existing) {
-          // Missed create — process it
-          const fakePayload = {
-            event: "invitee.created",
-            payload: { ...invitee, event: event.uri, event_type: event.event_type },
-          };
-          const parsed = parseCalendlyEvent(fakePayload);
-          const enriched = await enrichWithEventDetails(parsed, accessToken);
-          await processReconciledCreate(sr, connection, workspaceId, enriched, event);
-          processed++;
-        }
-      }
-    } catch (e) {
-      errors++;
-    }
-  }
-
-  // Process canceled events we missed
-  for (const event of canceledEvents) {
-    try {
-      const invitees = await fetchEventInvitees(accessToken, event.uri);
-      for (const invitee of invitees) {
-        const booking = firstRecord(
-          await sr.entities.Booking.filter({
-            workspace_id: workspaceId,
-            connection_id: connection.id,
-            provider_invitee_uri: invitee.uri,
-            provider_state: { $in: ["active", "rescheduled"] },
-          })
-        );
-        if (booking) {
-          await sr.entities.Booking.update(booking.id, {
-            provider_state: "canceled",
-            cancel_reason: invitee.cancel_reason || "",
-            canceled_at: invitee.canceled_at || new Date().toISOString(),
-          });
-          processed++;
-        }
-      }
-    } catch (e) {
-      errors++;
-    }
-  }
-
-  // Update sync cursor
-  await sr.entities.CalendarConnection.update(connection.id, {
-    last_sync_at: new Date().toISOString(),
-    last_sync_status: errors > 0 ? "partial" : "success",
-    last_sync_cursor: lookbackEnd.toISOString(),
-    last_sync_error: errors > 0 ? `${errors} errors during reconciliation` : "",
-  });
-
-  // Release outage hold only after catch-up and pending stops complete
-  if (connection.outage_hold) {
-    const releaseResult = await releaseOutageHold(sr, connection.id);
-    if (!releaseResult?.released) {
-      // Still pending stops — keep the hold
-      return { processed, errors, hold_released: false, pending_stops: releaseResult?.pending_stops || 0 };
-    }
-  }
-
-  return { processed, errors, lookback: { start: lookbackStart.toISOString(), end: lookbackEnd.toISOString() } };
+  return runAppointmentCheck(sr, connection, token, (invitee, event) => ingestCheckedAppointment(sr, connection, invitee, event));
 }
 
-// --- Fetch all scheduled events with pagination ---
-async function fetchAllScheduledEvents(accessToken, userUri, minStart, maxStart, status) {
-  const all = [];
-  let url = `https://api.calendly.com/scheduled_events?user=${encodeURIComponent(userUri)}&min_start_time=${encodeURIComponent(minStart)}&max_start_time=${encodeURIComponent(maxStart)}&status=${status}&per_page=${API_PAGE_SIZE}`;
-  let pageCount = 0;
-  while (url && pageCount < 20) {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) break;
-    const data = await res.json();
-    all.push(...(data.collection || []));
-    url = data.pagination?.next_page || null;
-    pageCount++;
-  }
-  return all;
-}
-
-// --- Fetch invitees for a scheduled event ---
-async function fetchEventInvitees(accessToken, eventUri) {
-  const all = [];
-  let url = `${eventUri}/invitees?per_page=${API_PAGE_SIZE}`;
-  let pageCount = 0;
-  while (url && pageCount < 10) {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) break;
-    const data = await res.json();
-    all.push(...(data.collection || []));
-    url = data.pagination?.next_page || null;
-    pageCount++;
-  }
-  return all;
+async function ingestCheckedAppointment(sr, connection, invitee, event) {
+    const existing = firstRecord(await sr.entities.Booking.filter({
+      workspace_id: connection.workspace_id, connection_id: connection.id, provider_invitee_uri: invitee.uri,
+    }));
+    const canceled = invitee.status === "canceled" || event.status === "canceled";
+    if (canceled) {
+      if (existing) await sr.entities.Booking.update(existing.id, {
+        provider_state: "canceled", cancel_reason: invitee.cancellation?.reason || "",
+        canceled_at: invitee.cancellation?.created_at || new Date().toISOString(),
+      });
+      if (invitee.new_invitee) await linkRescheduleChain(sr, connection.workspace_id, invitee.uri, invitee.new_invitee);
+      return;
+    }
+    const parsed = {...parseCalendlyEvent({event: "invitee.created", payload: {...invitee, event: event.uri, event_type: event.event_type}}),
+      start_time: event.start_time, end_time: event.end_time, event_title: event.name};
+    if (!parsed.start_time || !parsed.end_time) throw new Error("Appointment details incomplete");
+    await processReconciledCreate(sr, connection, connection.workspace_id, parsed, event);
+    if (invitee.old_invitee) await linkRescheduleChain(sr, connection.workspace_id, invitee.old_invitee, invitee.uri);
 }
 
 // --- Process a reconciled create (same logic as webhook processInviteeCreated) ---
@@ -286,7 +159,7 @@ async function processReconciledCreate(sr, connection, workspaceId, parsed, even
     created_at_provider: parsed.created_at,
   });
 
-  if (contact) {
+  if (contact && !booking.nurture_stopped) {
     await applyBookingStop(sr, workspaceId, contact.id, booking.id, "system:reconcile");
   }
 

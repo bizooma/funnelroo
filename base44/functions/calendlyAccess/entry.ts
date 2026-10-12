@@ -15,6 +15,7 @@ import {
 } from "../../shared/booking.ts";
 import { secrets } from "base44:runtime";
 import { consumeCalendlyState, forwardCalendlyCallback } from "../../shared/calendarOAuth.ts";
+import { calendlyPlanRestriction } from "../../shared/calendlyCapabilities.ts";
 
 // Workspace-authorized Calendly OAuth connection management.
 // The browser callback redirect always returns to the public site origin via HTML.
@@ -166,6 +167,10 @@ export default async function (req) {
         last_sync_at: connection.last_sync_at,
         last_sync_status: connection.last_sync_status,
         last_sync_error: connection.last_sync_error,
+        last_booking_check_success_at: connection.last_booking_check_success_at,
+        last_booking_check_attempt_at: connection.last_booking_check_attempt_at,
+        booking_check_status: connection.booking_check_status || "never",
+        booking_update_restriction: connection.booking_update_restriction || "unknown",
         outage_hold: connection.outage_hold,
         outage_hold_reason: connection.outage_hold_reason,
         plan_supports_webhooks: connection.plan_supports_webhooks,
@@ -214,8 +219,8 @@ export default async function (req) {
       }
 
       // Rate limit: 1 sync per 30 seconds per workspace
-      if (connection.last_sync_at) {
-        const ageMs = Date.now() - new Date(connection.last_sync_at).getTime();
+      if (connection.last_appointment_types_refresh_at) {
+        const ageMs = Date.now() - new Date(connection.last_appointment_types_refresh_at).getTime();
         if (ageMs < 30 * 1000) {
           return err(429, "Please wait 30 seconds between syncs");
         }
@@ -263,11 +268,8 @@ export default async function (req) {
           }
         }
 
-        // Update sync timestamp
         await sr.entities.CalendarConnection.update(connection.id, {
-          last_sync_at: new Date().toISOString(),
-          last_sync_status: "success",
-          last_sync_error: "",
+          last_appointment_types_refresh_at: new Date().toISOString(),
         });
 
         const eventTypes = asArray(
@@ -288,11 +290,7 @@ export default async function (req) {
           })),
         });
       } catch (e) {
-        await sr.entities.CalendarConnection.update(connection.id, {
-          last_sync_status: "failed",
-          last_sync_error: String(e?.message || e),
-        });
-        return err(502, `Calendly API error: ${e?.message || e}`);
+        return err(502, "Appointment types could not be refreshed. Please try again later.");
       }
     }
 
@@ -383,23 +381,15 @@ export default async function (req) {
         return ok({ connected: false, status: "reconnect_required", reason: "expired_authorization" });
       }
 
-      // Verify user identity at provider
-      let tokenValid = false;
-      try {
-        const userRes = await fetch(`${CALENDLY_API_BASE}/users/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: AbortSignal.timeout(15000),
-        });
-        tokenValid = userRes.ok;
-      } catch {}
-
-      if (!tokenValid) {
-        await sr.entities.CalendarConnection.update(connection.id, {
-          status: "reconnect_required",
-          webhook_health: "missing",
-        });
-        return ok({ connected: false, status: "reconnect_required", reason: "expired_authorization" });
+      // Only an explicit authorization rejection requires renewal.
+      const userRes = await fetch(`${CALENDLY_API_BASE}/users/me`, {
+        headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15000),
+      });
+      if (userRes.status === 401) {
+        await sr.entities.CalendarConnection.update(connection.id, {status: "reconnect_required"});
+        return ok({connected: false, status: "reconnect_required", reason: "expired_authorization"});
       }
+      if (!userRes.ok) return err(502, "Calendar connection could not be checked. Please try again later.");
 
       // Restore connected status if it was reconnect_required
       if (connection.status === "reconnect_required") {
@@ -408,6 +398,7 @@ export default async function (req) {
 
       // Check/repair webhook subscription without creating duplicates
       let webhookHealth = connection.webhook_health;
+      let restriction = "unknown";
       let planSupportsWebhooks = connection.plan_supports_webhooks;
       let subUri = connection.webhook_subscription_uri;
 
@@ -420,6 +411,7 @@ export default async function (req) {
           });
           if (subRes.ok) {
             webhookHealth = "healthy";
+            restriction = "none";
             planSupportsWebhooks = true;
           } else if (subRes.status === 404) {
             // Subscription was deleted at provider — clear and try to recreate
@@ -439,10 +431,11 @@ export default async function (req) {
         try {
           await createCalendlyWebhook(sr, connection, token);
           webhookHealth = "healthy";
+          restriction = "none";
           planSupportsWebhooks = true;
         } catch (e) {
-          const msg = String(e?.message || e);
-          if (msg.includes("402") || msg.includes("paid") || msg.includes("upgrade")) {
+          restriction = e.planRestriction || "unknown";
+          if (["free_plan", "plan_restriction"].includes(restriction)) {
             webhookHealth = "missing";
             planSupportsWebhooks = false;
           } else {
@@ -454,7 +447,8 @@ export default async function (req) {
       await sr.entities.CalendarConnection.update(connection.id, {
         webhook_health: webhookHealth,
         plan_supports_webhooks: planSupportsWebhooks,
-        last_sync_at: new Date().toISOString(),
+        booking_update_restriction: restriction,
+        booking_update_restriction_checked_at: new Date().toISOString(),
       });
 
       return ok({
@@ -462,6 +456,7 @@ export default async function (req) {
         status: "connected",
         webhook_health: webhookHealth,
         plan_supports_webhooks: planSupportsWebhooks,
+        booking_update_restriction: restriction,
         provider_user_email: connection.provider_user_email,
         provider_user_name: connection.provider_user_name,
       });
@@ -473,25 +468,19 @@ export default async function (req) {
       const connection = firstRecord(
         await sr.entities.CalendarConnection.filter({ workspace_id: body.workspace_id, provider: "calendly" })
       );
-      const paused = !!(connection?.outage_hold);
-      if (!paused) return ok({ paused: false, affected: [] });
-
-      // Find active enrollments and their funnel/sequence names
-      const enrollments = asArray(
-        await sr.entities.NurtureEnrollment.filter({ workspace_id: body.workspace_id, state: "active" }, { limit: 500 })
-      );
-      const sequenceIds = [...new Set(enrollments.map((e) => e.sequence_id).filter(Boolean))];
+      const configuredCount = await sr.entities.NurtureSequence.count({workspace_id: body.workspace_id, status: {$ne: "archived"}});
+      const runningQuery = {workspace_id: body.workspace_id, status: "active", sending_enabled: true};
+      const runningCount = await sr.entities.NurtureSequence.count(runningQuery);
+      const held = connection?.status === "connected" && !!connection.outage_hold && runningCount > 0;
       const affected = [];
-      for (const seqId of sequenceIds) {
-        const seq = firstRecord(await sr.entities.NurtureSequence.filter({ id: seqId }));
-        let funnelName = "";
-        if (seq?.funnel_id) {
-          const funnel = firstRecord(await sr.entities.Funnel.filter({ id: seq.funnel_id }));
-          funnelName = funnel?.name || "";
+      if (held) {
+        const page = await sr.entities.NurtureSequence.filter(runningQuery, {limit: 50});
+        for (const seq of page.items) {
+          const funnel = seq.funnel_id ? firstRecord(await sr.entities.Funnel.filter({id: seq.funnel_id, workspace_id: body.workspace_id})) : null;
+          affected.push({funnel_name: funnel?.name || "", sequence_name: seq.name});
         }
-        affected.push({ funnel_name: funnelName, sequence_name: seq?.name || "" });
       }
-      return ok({ paused: true, affected, enrollment_count: enrollments.length });
+      return ok({paused: held, state: !configuredCount ? "not_configured" : held || !runningCount ? "paused" : "running", affected, affected_count: held ? runningCount : 0});
     }
 
     return err(400, `Unknown action: ${action}`);
@@ -638,18 +627,22 @@ async function handleCallback(base44, sr, body, req) {
     await sr.entities.CalendarConnection.update(connection.id, {
       webhook_health: "healthy",
       plan_supports_webhooks: true,
+      booking_update_restriction: "none",
+      booking_update_restriction_checked_at: new Date().toISOString(),
     });
   } catch (e) {
-    const msg = String(e?.message || e);
-    if (msg.includes("402") || msg.includes("paid") || msg.includes("upgrade")) {
+    const restriction = e.planRestriction || "unknown";
+    if (["free_plan", "plan_restriction"].includes(restriction)) {
       await sr.entities.CalendarConnection.update(connection.id, {
         webhook_health: "missing",
         plan_supports_webhooks: false,
+        booking_update_restriction: restriction,
+        booking_update_restriction_checked_at: new Date().toISOString(),
       });
     } else {
       await sr.entities.CalendarConnection.update(connection.id, {
         webhook_health: "failed",
-        last_sync_error: `Webhook setup failed: ${msg}`,
+        booking_update_restriction: "unknown",
       });
     }
   }
@@ -693,6 +686,26 @@ async function createCalendlyWebhook(sr, connection, accessToken) {
   const webhookUrl = "https://funnel-roo-flow.base44.app/functions/bookingWebhook";
   const orgUri = connection.provider_organization_uri;
   const userUri = connection.provider_user_uri;
+  // Recover an existing subscription even if a previous save was interrupted.
+  let listUrl = `${CALENDLY_API_BASE}/webhook_subscriptions?` + new URLSearchParams({organization: orgUri, user: userUri, scope: "user", count: "100"});
+  let pages = 0;
+  while (listUrl) {
+    if (++pages > 10) throw new Error("Subscription check incomplete; no new subscription created");
+    if (new URL(listUrl).origin !== CALENDLY_API_BASE) throw new Error("Invalid subscription address");
+    const response = await fetch(listUrl, {headers: {Authorization: `Bearer ${accessToken}`}, signal: AbortSignal.timeout(15000)});
+    if (!response.ok) {
+      const error = new Error("Booking update capabilities could not be checked");
+      error.planRestriction = calendlyPlanRestriction(response.status, await response.text());
+      throw error;
+    }
+    const data = await response.json();
+    const existing = (data.collection || []).find(s => s.callback_url === webhookUrl && s.state === "active" && ["invitee.created", "invitee.canceled"].every(e => s.events?.includes(e)));
+    if (existing) {
+      await sr.entities.CalendarConnection.update(connection.id, {webhook_subscription_uri: existing.uri, webhook_subscription_id: existing.uri.split("/").pop()});
+      return;
+    }
+    listUrl = data.pagination?.next_page || "";
+  }
 
   const res = await fetch(`${CALENDLY_API_BASE}/webhook_subscriptions`, {
     method: "POST",
@@ -712,8 +725,10 @@ async function createCalendlyWebhook(sr, connection, accessToken) {
   });
 
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Webhook creation failed (${res.status}): ${body.slice(0, 200)}`);
+    const body = await res.text();
+    const error = new Error("Instant booking updates could not be established");
+    error.planRestriction = calendlyPlanRestriction(res.status, body);
+    throw error;
   }
 
   const data = await res.json();

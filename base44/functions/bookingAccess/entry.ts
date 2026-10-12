@@ -35,7 +35,7 @@ export default async function (req) {
       // Filters
       if (body.view === "upcoming") {
         query.start_time_utc = { $gte: new Date().toISOString() };
-        query.provider_state = { $in: ["active", "rescheduled"] };
+        query.provider_state = "active";
       } else if (body.view === "needs_outcome") {
         query.start_time_utc = { $lt: new Date().toISOString() };
         query.provider_state = { $in: ["active", "rescheduled"] };
@@ -352,7 +352,7 @@ export default async function (req) {
 
       // Upcoming, canceled, attended, no-show, unknown
       const now = new Date();
-      const upcoming = allBookings.filter((b) => b.provider_state !== "canceled" && b.start_time_utc && new Date(b.start_time_utc) > now);
+      const upcoming = allBookings.filter((b) => b.provider_state === "active" && b.start_time_utc && new Date(b.start_time_utc) > now);
       const canceled = allBookings.filter((b) => b.provider_state === "canceled");
       const attended = allBookings.filter((b) => b.attendance_outcome === "attended");
       const noShow = allBookings.filter((b) => b.attendance_outcome === "no_show");
