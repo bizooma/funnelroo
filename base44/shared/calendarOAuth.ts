@@ -32,7 +32,18 @@ export function forwardCalendlyCallback(req) {
     if (value && value.length <= 4096) target.searchParams.set(`calendly_${key}`, value);
   }
   if (!params.has("code") && !params.has("error")) target.searchParams.set("calendly_error", "missing_callback");
-  return new Response(null, { status: 303, headers: {
-    Location: target.toString(), "Cache-Control": "no-store", "Referrer-Policy": "no-referrer"
+  // Return an HTML page with a client-side redirect. The platform rewrites
+  // HTTP 3xx Location headers to the internal dispatcher origin, which breaks
+  // the auth session. A JS/meta redirect runs in the browser and lands on
+  // the public site where the user's session cookie is valid.
+  const safe = target.toString().replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/'/g, "&#39;");
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Connecting to FunnelRoo…</title>
+<meta http-equiv="refresh" content="0;url=${safe}">
+<script>window.location.replace(${JSON.stringify(target.toString())});</script>
+</head><body style="font-family:system-ui,sans-serif;padding:2rem;color:#475569">Redirecting you back to FunnelRoo…</body></html>`;
+  return new Response(html, { status: 200, headers: {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store",
+    "Referrer-Policy": "no-referrer"
   } });
 }

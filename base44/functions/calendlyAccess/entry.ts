@@ -17,6 +17,7 @@ import { secrets } from "base44:runtime";
 import { consumeCalendlyState, forwardCalendlyCallback } from "../../shared/calendarOAuth.ts";
 
 // Workspace-authorized Calendly OAuth connection management.
+// The browser callback redirect always returns to the public site origin via HTML.
 // Handles: authorize (PKCE), callback (token exchange), status, event types,
 // disconnect, reconnect, sync, and webhook subscription management.
 //
@@ -59,7 +60,13 @@ async function generateCodeChallenge(verifier) {
 // used for webhook subscriptions) so the callback is stable regardless of
 // which URL the builder is viewing the app from.
 const PUBLISHED_ORIGIN = "https://funnelroo.com";
-const CALENDLY_CALLBACK_URL = `${PUBLISHED_ORIGIN}/functions/calendlyAccess`;
+// Calendly redirects the browser directly to the Settings page (not the
+// function endpoint) so the user's auth session is present when the
+// callback code is exchanged. The platform rewrites HTTP 3xx Location
+// headers from function endpoints to an internal dispatcher domain that
+// has no auth session, so the function endpoint cannot be used as the
+// OAuth redirect URI.
+const CALENDLY_CALLBACK_URL = `${PUBLISHED_ORIGIN}/settings`;
 
 function getCallbackUrl() {
   return CALENDLY_CALLBACK_URL;
@@ -67,7 +74,28 @@ function getCallbackUrl() {
 
 export default async function (req) {
   try {
-    if (req.method === "GET") return forwardCalendlyCallback(req);
+    if (req.method === "GET") {
+      // Calendly redirects the browser here with ?code=...&state=...  The
+      // platform rewrites HTTP 3xx Location headers to an internal dispatcher
+      // domain that has no auth session, so we return an HTML page with a
+      // client-side JS redirect to the public site's Settings page instead.
+      const reqUrl = new URL(req.url);
+      const target = new URL("https://funnelroo.com/settings?tab=integrations");
+      for (const key of ["code", "state", "error"]) {
+        const v = reqUrl.searchParams.get(key);
+        if (v && v.length <= 4096) target.searchParams.set(`calendly_${key}`, v);
+      }
+      if (!reqUrl.searchParams.has("code") && !reqUrl.searchParams.has("error")) {
+        target.searchParams.set("calendly_error", "missing_callback");
+      }
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Connecting to FunnelRoo…</title>
+<meta http-equiv="refresh" content="0;url=${target.toString().replace(/</g,"&lt;")}">
+<script>window.location.replace(${JSON.stringify(target.toString())});</script>
+</head><body style="font-family:system-ui,sans-serif;padding:2rem;color:#475569">Redirecting you back to FunnelRoo…</body></html>`;
+      return new Response(html, { status: 200, headers: {
+        "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer"
+      } });
+    }
     const base44 = createClientFromRequest(req);
     const sr = base44.asServiceRole;
     const body = await req.json().catch(() => ({}));

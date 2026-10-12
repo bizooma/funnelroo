@@ -8,12 +8,15 @@ export default function CalendlyCallback() {
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (started.current || (!params.has("calendly_code") && !params.has("calendly_error"))) return;
+    // Support both direct Calendly params (code/state) and forwarded params
+    // (calendly_code/calendly_state) from the function endpoint fallback.
+    const hasCode = params.has("code") || params.has("calendly_code");
+    if (started.current || (!hasCode && !params.has("error") && !params.has("calendly_error"))) return;
     started.current = true;
-    const code = params.get("calendly_code");
-    const state = params.get("calendly_state");
-    const error = params.get("calendly_error");
-    for (const key of ["calendly_code", "calendly_state", "calendly_error"]) params.delete(key);
+    const code = params.get("code") || params.get("calendly_code");
+    const state = params.get("state") || params.get("calendly_state");
+    const error = params.get("error") || params.get("calendly_error");
+    for (const key of ["code", "state", "error", "calendly_code", "calendly_state", "calendly_error"]) params.delete(key);
     window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
     if (error) { setMessage("Calendly authorization was not completed. Click Connect Calendly to try again."); return; }
     setBusy(true);
