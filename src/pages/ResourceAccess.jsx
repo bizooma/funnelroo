@@ -2,13 +2,17 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { MascotBadge } from "@/components/MascotBadge";
+import { useSeoMetaTags } from "@/hooks/useSeoMetaTags";
 import { Loader2, Download, FileX, Clock, ShieldOff } from "lucide-react";
+
+const RESOURCE_ACCESS_SEO = { indexable: false, title: "Resource access — FunnelRoo" };
 
 // Stable FunnelRoo resource-access route. Validates the grant server-side and
 // issues a fresh short-lived download URL (file) or redirects (external).
 // Never exposes private storage paths to the visitor.
 export default function ResourceAccess() {
   const { token } = useParams();
+  useSeoMetaTags(RESOURCE_ACCESS_SEO);
   const [state, setState] = useState({ loading: true, data: null, error: "" });
 
   useEffect(() => {

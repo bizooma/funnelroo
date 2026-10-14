@@ -169,7 +169,7 @@ export default async function (req) {
       await requireMembership(base44, workspaceId, ["owner", "admin", "member"]);
       const update = {};
       // Only non-protected metadata fields are settable
-      for (const k of ["name", "type", "goal", "slug", "audience_id", "offer_id", "wizard_step"]) {
+      for (const k of ["name", "type", "goal", "slug", "audience_id", "offer_id", "wizard_step", "seo_title", "seo_description", "social_image_url"]) {
         if (body[k] !== undefined) update[k] = body[k];
       }
       if (update.slug) {
@@ -388,6 +388,9 @@ export default async function (req) {
         funnel_name: funnel.name,
         funnel_type: funnel.type,
         goal: funnel.goal,
+        seo_title: funnel.seo_title || "",
+        seo_description: funnel.seo_description || "",
+        social_image_url: funnel.social_image_url || "",
         resource_version_id: draft.resource_version_id || "",
         resource_title: resourceTitle,
         delivery_mode: deliveryMode,

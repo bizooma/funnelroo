@@ -7,6 +7,7 @@ import { BlockEditor } from "@/components/funnel/BlockEditor";
 import { FunnelResourceTab } from "@/components/funnel/FunnelResourceTab";
 import { NurtureTab } from "@/components/funnel/NurtureTab";
 import { BookingTab } from "@/components/funnel/BookingTab";
+import { FunnelSeoCard } from "@/components/funnel/FunnelSeoCard";
 import { ComingSoon } from "@/components/ComingSoon";
 import { RooPanel } from "@/components/RooPanel";
 import { Button } from "@/components/ui/button";
@@ -288,6 +289,8 @@ export default function FunnelWorkspace() {
                 </div>
               </CardContent>
             </Card>
+
+            <FunnelSeoCard funnel={funnel} onChanged={load} />
           </div>
         )}
 

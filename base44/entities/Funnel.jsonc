@@ -51,6 +51,17 @@
     "wizard_step": {
       "type": "number",
       "default": 1
+    },
+    "seo_title": {
+      "type": "string",
+      "maxLength": 300
+    },
+    "seo_description": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "social_image_url": {
+      "type": "string"
     }
   },
   "required": [

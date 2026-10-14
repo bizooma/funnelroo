@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { useSeoMetaTags } from "@/hooks/useSeoMetaTags";
 import { PageRenderer } from "@/components/funnel/PageRenderer";
 import { MascotBadge } from "@/components/MascotBadge";
 import { Loader2, FileQuestion } from "lucide-react";
@@ -18,6 +19,21 @@ export default function PublicFunnel() {
   const [formState, setFormState] = useState({ submitting: false, error: "", confirmation: null, consentText: "" });
   const [bookingUrl, setBookingUrl] = useState(null);
   const requestIdRef = useRef(null);
+
+  const seo = useMemo(() => {
+    if (error) return { indexable: false, title: "Funnel unavailable" };
+    if (!data) return null;
+    const s = data.seo || {};
+    return {
+      indexable: true,
+      title: s.title || `${data.funnel?.name || "FunnelRoo"} — Book a time`,
+      description: s.description || "",
+      canonicalUrl: s.canonical_url || `https://funnelroo.com/f/${publicId}`,
+      ogImage: s.social_image_url || "",
+    };
+  }, [data, error, publicId]);
+
+  useSeoMetaTags(seo);
 
   useEffect(() => {
     (async () => {

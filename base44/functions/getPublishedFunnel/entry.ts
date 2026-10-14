@@ -92,6 +92,16 @@ export default async function (req) {
     const bookingCtaLabel = snapshot.booking_cta_label || "Book a time";
     const bookingCtaCopy = snapshot.booking_cta_copy || "";
 
+    // SEO data: prefer funnel-level overrides, fall back to hero block content.
+    const heroBlock = blocks.find((b) => b.type === "hero");
+    const heroHeadline = heroBlock?.props?.headline || "";
+    const heroSubheadline = heroBlock?.props?.subheadline || "";
+    // Workspace logo for og:image fallback chain
+    const businessProfile = firstRecord(
+      await sr.entities.BusinessProfile.filter({ workspace_id: funnel.workspace_id })
+    );
+    const workspaceLogo = businessProfile?.logo_url || "";
+
     return ok({
       funnel: {
         name: funnel.name,
@@ -99,7 +109,18 @@ export default async function (req) {
         slug: funnel.slug,
         public_id: funnel.public_id,
         goal: funnel.goal,
+        seo_title: funnel.seo_title || "",
+        seo_description: funnel.seo_description || "",
+        social_image_url: funnel.social_image_url || "",
       },
+      seo: {
+        title: funnel.seo_title || `${funnel.name} — ${heroHeadline || "Book a time"}`,
+        description: (funnel.seo_description || heroSubheadline || "").slice(0, 155),
+        canonical_url: `https://funnelroo.com/f/${funnel.public_id}`,
+        social_image_url: funnel.social_image_url || workspaceLogo || "",
+      },
+      hero_headline: heroHeadline,
+      hero_subheadline: heroSubheadline,
       version: {
         version_number: version.version_number,
         published_at: version.published_at,
