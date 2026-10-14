@@ -13,6 +13,8 @@ const RESEND_IDEMPOTENCY_WINDOW_HOURS = 24;
 const MAX_DISPATCH_BATCH = 10;
 const MAX_ATTEMPTS = 3;
 const CLAIM_LEASE_SECONDS = 120; // 2 min lease — re-claim if expired
+const RETRY_BACKOFF_MINUTES = [15, 60]; // after attempt 1 -> 15m, after attempt 2 -> 60m
+const MAX_REQUEUE_SWEEP = 50;           // bound the sweep per run
 
 const SUPPORTED_MERGE_FIELDS = [
   "first_name", "last_name", "business_name", "offer_name",
@@ -465,11 +467,86 @@ export async function tryEnroll(sr, base44, workspaceId, contactId, funnelId, su
 // --- Dispatch: process due messages ---
 // Called by the scheduled workflow. Finds due queued messages, claims each
 // atomically, rechecks eligibility, sends via provider, and schedules next step.
+// Requeue messages stuck in recoverable states: lease-expired "processing"
+// (worker crashed mid-send) and "retryable_failure" (transient send error).
+// Every state change is an atomic updateMany filtered on the row's CURRENT
+// recoverable state, so it cannot clobber a row another concurrent dispatch
+// run just re-claimed. Does NOT increment attempts — the claim in
+// processOneMessage does that, so each requeue -> claim is one attempt,
+// correctly spaced by the backoff. Global across all workspaces, like the
+// existing dispatch.
+export async function requeueRecoverableMessages(sr, now) {
+  const nowIso = now.toISOString();
+  let requeued = 0;
+  let failed = 0;
+
+  // a) Lease-expired crash recovery: processing rows with expired lease
+  const expiredLease = asArray(
+    await sr.entities.NurtureMessage.filter(
+      { outcome: "processing", claim_lease_expires_at: { $lte: nowIso } },
+      { sort: "claim_lease_expires_at", limit: MAX_REQUEUE_SWEEP }
+    )
+  );
+  for (const msg of expiredLease) {
+    if ((msg.attempts || 0) >= MAX_ATTEMPTS) {
+      await sr.entities.NurtureMessage.updateMany(
+        { id: msg.id, outcome: "processing", claim_lease_expires_at: { $lte: nowIso } },
+        { $set: { outcome: "permanently_failed", last_error: "Max attempts reached (lease expired)" } }
+      );
+      failed++;
+    } else {
+      await sr.entities.NurtureMessage.updateMany(
+        { id: msg.id, outcome: "processing", claim_lease_expires_at: { $lte: nowIso } },
+        { $set: { outcome: "queued", due_at: nowIso } }
+      );
+      requeued++;
+    }
+  }
+
+  // b) Retryable-failure backoff: requeue once the backoff has elapsed
+  const retryable = asArray(
+    await sr.entities.NurtureMessage.filter(
+      { outcome: "retryable_failure" },
+      { sort: "last_attempt_at", limit: MAX_REQUEUE_SWEEP }
+    )
+  );
+  for (const msg of retryable) {
+    const attempts = msg.attempts || 0;
+    if (attempts >= MAX_ATTEMPTS) {
+      await sr.entities.NurtureMessage.updateMany(
+        { id: msg.id, outcome: "retryable_failure" },
+        { $set: { outcome: "permanently_failed", last_error: "Max attempts reached" } }
+      );
+      failed++;
+      continue;
+    }
+    const backoffIndex = Math.min(attempts, RETRY_BACKOFF_MINUTES.length) - 1;
+    const backoffMinutes = RETRY_BACKOFF_MINUTES[backoffIndex];
+    const lastAttemptAt = msg.last_attempt_at ? new Date(msg.last_attempt_at) : now;
+    const nextRetryTime = new Date(lastAttemptAt.getTime() + backoffMinutes * 60 * 1000);
+    if (now.getTime() >= nextRetryTime.getTime()) {
+      await sr.entities.NurtureMessage.updateMany(
+        { id: msg.id, outcome: "retryable_failure" },
+        { $set: { outcome: "queued", due_at: nowIso } }
+      );
+      requeued++;
+    }
+    // else: backoff not elapsed yet, leave it
+  }
+
+  return { requeued, failed };
+}
+
 export async function dispatchDueMessages(sr, origin, opts) {
   const now = new Date();
   const mock = opts?.mock || !isProviderConfigured();
   const batch = opts?.batch || MAX_DISPATCH_BATCH;
   const results = [];
+
+  // Recover messages stuck in "processing" (crashed worker) or
+  // "retryable_failure" (transient error) before selecting due messages,
+  // so recovered rows are eligible in this same run.
+  await requeueRecoverableMessages(sr, now);
 
   // Find due queued messages across all workspaces, sorted by due_at
   const due = asArray(
