@@ -8,6 +8,10 @@
     "workspace_id": {
       "type": "string"
     },
+    "description": {
+      "type": "string",
+      "maxLength": 1000
+    },
     "page_blocks": {
       "type": "array",
       "items": {

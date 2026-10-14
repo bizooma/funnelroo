@@ -8,6 +8,10 @@
     "workspace_id": {
       "type": "string"
     },
+    "description": {
+      "type": "string",
+      "maxLength": 1000
+    },
     "version_number": {
       "type": "number"
     },

@@ -8,6 +8,10 @@
     "name": {
       "type": "string"
     },
+    "description": {
+      "type": "string",
+      "maxLength": 1000
+    },
     "offer": {
       "type": "string"
     },

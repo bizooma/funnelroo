@@ -12,6 +12,10 @@
     "submission_id": {
       "type": "string"
     },
+    "description": {
+      "type": "string",
+      "maxLength": 1000
+    },
     "resource_grant_id": {
       "type": "string"
     },

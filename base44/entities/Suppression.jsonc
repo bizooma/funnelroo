@@ -11,6 +11,10 @@
     "email_normalized": {
       "type": "string"
     },
+    "description": {
+      "type": "string",
+      "maxLength": 1000
+    },
     "reason": {
       "type": "string",
       "enum": [
