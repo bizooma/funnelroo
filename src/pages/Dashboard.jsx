@@ -164,7 +164,7 @@ function LaunchGuide({ dashState, funnels, brief }) {
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
               <Image
-                src="https://media.base44.com/images/public/6acba9de240facdd95f5665d/ab6d36c18_point-right.png"
+                src="https://media.base44.com/images/public/6acba9de240facdd95f5665d/255ed3391_point-right1.png"
                 alt="Roo pointing to your next step"
                 className="h-12 w-12 shrink-0"
                 fittingType="fit"
