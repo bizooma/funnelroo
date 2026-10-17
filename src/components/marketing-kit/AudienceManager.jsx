@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useWorkspace } from "@/lib/workspaceContext";
 import { base44 } from "@/api/base44Client";
 import { RooPanel } from "@/components/RooPanel";
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/use-toast";
 import {
-  Plus, Search, Loader2, Save, Copy, Archive, RotateCcw, Check, ChevronDown, ChevronUp, Sparkles, Eye,
+  Plus, Search, Loader2, Save, Copy, Archive, RotateCcw, Check, ChevronDown, ChevronUp, Sparkles, Eye, Pencil,
 } from "lucide-react";
 
 export default function AudienceManager() {
@@ -109,12 +109,13 @@ export default function AudienceManager() {
 
 function AudienceRow({ audience, canAdmin, onEdit, onDuplicate, onArchive, onRestore }) {
   const [expanded, setExpanded] = useState(false);
+  const navigate = useNavigate();
   const statusMap = { draft: "bg-slate-100 text-slate-600", ready: "bg-emerald-100 text-emerald-700", archived: "bg-slate-100 text-slate-400" };
   return (
     <Card>
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
-          <div className="flex-1 cursor-pointer" onClick={onEdit}>
+          <div className="flex-1 cursor-pointer" onClick={() => navigate(`/marketing-kit/audiences/${audience.id}`)}>
             <div className="flex items-center gap-2">
               <span className="font-medium text-slate-800">{audience.name}</span>
               <span className={`text-[10px] px-1.5 py-0.5 rounded-full capitalize ${statusMap[audience.status] || statusMap.draft}`}>{audience.status}</span>
@@ -125,6 +126,7 @@ function AudienceRow({ audience, canAdmin, onEdit, onDuplicate, onArchive, onRes
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <Button size="sm" variant="ghost" onClick={onEdit} title="Edit audience"><Pencil className="w-3.5 h-3.5" /></Button>
             <Link to={`/marketing-kit/audiences/${audience.id}`}>
               <Button size="sm" variant="ghost" title="View persona card"><Eye className="w-3.5 h-3.5" /></Button>
             </Link>
@@ -170,7 +172,8 @@ export function AudienceEditor({ audience, onClose, onSaved }) {
   const [justSaved, setJustSaved] = useState(null);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const setArr = (k, text) => set(k, text.split("\n").filter(Boolean));
+  // Keep blank lines while editing so Enter works; empty lines are stripped at save.
+  const setArr = (k, text) => set(k, text.split("\n"));
 
   async function save(status) {
     setSaving(true);
@@ -181,10 +184,10 @@ export function AudienceEditor({ audience, onClose, onSaved }) {
         id: form.id,
         name: form.name,
         roles_industries: form.roles_industries,
-        problems: form.problems || [],
-        desired_outcomes: form.desired_outcomes || [],
-        objections: form.objections || [],
-        alternatives: form.alternatives || [],
+        problems: (form.problems || []).filter(Boolean),
+        desired_outcomes: (form.desired_outcomes || []).filter(Boolean),
+        objections: (form.objections || []).filter(Boolean),
+        alternatives: (form.alternatives || []).filter(Boolean),
         status: status || form.status || "draft",
       });
       toast({ title: status === "ready" ? "Marked ready" : "Saved" });
