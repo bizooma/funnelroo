@@ -71,7 +71,7 @@ export default async function (req) {
 - Approved facts: ${JSON.stringify(profile?.approved_facts || [])}
 - Language to use: ${JSON.stringify(profile?.language_to_use || [])}
 - Language to avoid: ${JSON.stringify(profile?.language_to_avoid || [])}
-APPROVED AUDIENCES: ${JSON.stringify(approvedAudiences.map((a) => ({ name: a.name, problems: a.problems, objections: a.objections, desired_outcomes: a.desired_outcomes })))}
+APPROVED AUDIENCES: ${JSON.stringify(approvedAudiences.map((a) => ({ name: a.name, problems: a.problems, objections: a.objections, desired_outcomes: a.desired_outcomes, messaging_guidance: a.persona?.messaging_guidance || [] })))}
 APPROVED OFFERS: ${JSON.stringify(approvedOffers.map((o) => ({ name: o.name, offer: o.offer, goal: o.goal, cta: o.cta })))}
 ${unapprovedCount > 0 ? `NOTE: ${unapprovedCount} unapproved audience/offer item(s) exist but are excluded from this context. Do not reference them; suggest the user review and approve them in Settings if relevant.` : ""}`;
 
@@ -279,7 +279,13 @@ Return JSON matching this schema: ${JSON.stringify(schema)}`;
           bio_summary: { type: "string" },
           representative_statement: { type: "string" },
           motivation_labels: { type: "array", items: { type: "string" } },
-          messaging_guidance: { type: "array", items: { type: "string" } },
+          messaging_guidance: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: { heading: { type: "string" }, text: { type: "string" } },
+            },
+          },
           notes: { type: "string" },
         },
       };
@@ -300,7 +306,7 @@ Help present this audience as a one-page persona card for internal marketing ref
 2. Draft a 2-3 sentence factual bio summary from the audience profile above. Do not invent demographics, age, family, income or budget.
 3. Draft ONE representative statement in the audience's voice that reflects their stated problem or goal. This is an illustrative statement, NOT a customer quote.
 4. Suggest up to 6 purchasing-relevant motivation labels for this audience (labels only, no ratings).
-5. Offer 2-3 short messaging guidance notes for speaking to this audience.
+5. Offer 2-3 short messaging guidance notes for speaking to this audience. For each, optionally label it with a concise heading such as "Lead with", "Address", or "Avoid" where it fits the content; leave heading empty otherwise. Return each as { heading, text }.
 Mark anything inferred as an AI suggestion in the notes. Return JSON matching this schema: ${JSON.stringify(schema)}`;
       const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
         prompt,

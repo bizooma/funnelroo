@@ -156,6 +156,24 @@
             }
           }
         },
+        "messaging_guidance": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "heading": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "messaging_ai_suggested": {
+          "type": "boolean",
+          "default": false
+        },
         "theme": {
           "type": "object",
           "properties": {

@@ -30,7 +30,8 @@ const PERSONA_KEYS = [
   "title", "subtitle", "role", "industry", "company_size", "location",
   "buying_role", "age", "family", "portrait_url", "portrait_credit",
   "quote_text", "quote_source", "quote_kind", "bio_summary",
-  "motivations", "buying_style", "theme", "highlights_only",
+  "motivations", "buying_style", "messaging_guidance", "messaging_ai_suggested",
+  "theme", "highlights_only",
 ];
 function sanitizePersona(input) {
   if (!input || typeof input !== "object") return undefined;
@@ -56,10 +57,33 @@ function sanitizePersona(input) {
       position: Number.isFinite(b.position) ? Math.max(0, Math.min(100, Math.round(b.position))) : null,
     })).filter((b) => b.left && b.right);
   }
+  if (Array.isArray(out.messaging_guidance)) {
+    out.messaging_guidance = out.messaging_guidance.slice(0, 6).map((g) => ({
+      heading: String(g.heading || "").slice(0, 40),
+      text: String(g.text || "").slice(0, 300),
+    })).filter((g) => g.text);
+  }
+  if (out.messaging_ai_suggested !== undefined) {
+    out.messaging_ai_suggested = !!out.messaging_ai_suggested;
+  }
   if (out.theme && typeof out.theme === "object") {
     out.theme = { accent: String(out.theme.accent || "").slice(0, 20), preset: String(out.theme.preset || "").slice(0, 40) };
   }
   return out;
+}
+
+// Generated content fields reflect the audience's core facts (bio, messaging
+// guidance, quote, motivations). A save that changes only presentation (theme,
+// portrait, demographics) is cosmetic and must not mark previously generated
+// content current or rebind it to the latest audience revision.
+const GENERATED_FIELDS = ["bio_summary", "messaging_guidance", "quote_text", "motivations"];
+function generatedFieldsChanged(next, prev) {
+  for (const k of GENERATED_FIELDS) {
+    const a = next[k] === undefined ? null : next[k];
+    const b = prev[k] === undefined ? null : prev[k];
+    if (JSON.stringify(a) !== JSON.stringify(b)) return true;
+  }
+  return false;
 }
 
 export default async function (req) {
@@ -361,16 +385,26 @@ export default async function (req) {
       );
       if (!existing) return err(404, "Audience not found");
       const sanitized = sanitizePersona(body.persona) || {};
-      const contentHash = audienceContentHash(existing);
+      const newHash = audienceContentHash(existing);
+      const prev = existing.persona || {};
       const persona = {
-        ...(existing.persona || {}),
+        ...prev,
         ...sanitized,
-        content_hash: contentHash,
-        source_revision: contentHash,
-        stale: false,
         updated_at: new Date().toISOString(),
         updated_by: user.id,
       };
+      if (generatedFieldsChanged(sanitized, prev)) {
+        // A review of generated content: rebind to the current audience revision.
+        persona.content_hash = newHash;
+        persona.source_revision = newHash;
+        persona.stale = false;
+      } else {
+        // Cosmetic-only save: preserve the revision the content was last
+        // reviewed against and any existing staleness warning.
+        persona.content_hash = prev.content_hash;
+        persona.source_revision = prev.source_revision;
+        persona.stale = prev.stale ?? false;
+      }
       const updated = await sr.entities.Audience.update(body.id, { persona });
       return ok({ audience: updated });
     }

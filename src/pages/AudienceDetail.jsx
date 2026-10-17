@@ -25,6 +25,7 @@ export default function AudienceDetail() {
   const [refining, setRefining] = useState(false);
   const [editing, setEditing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const cardRef = useRef(null);
 
   async function load() {
@@ -34,6 +35,7 @@ export default function AudienceDetail() {
       const res = await base44.functions.invoke("marketingKitAccess", { action: "getAudience", workspace_id: current.id, id });
       setAudience(res.data?.audience);
       setProfile(res.data?.profile);
+      setDirty(false);
     } catch (e) {
       toast({ title: "Load failed", description: e.response?.data?.error || e.message, variant: "destructive" });
       navigate("/marketing-kit?area=audiences");
@@ -61,6 +63,7 @@ export default function AudienceDetail() {
         persona: next,
       });
       setAudience(res.data?.audience);
+      setDirty(false);
       toast({ title: "Card saved" });
     } catch (e) {
       toast({ title: "Save failed", description: e.response?.data?.error || e.message, variant: "destructive" });
@@ -76,8 +79,13 @@ export default function AudienceDetail() {
     else if (field === "motivations") {
       next.motivations = (value || []).map((label) => ({ label, rating: null }));
     }
+    else if (field === "messaging") {
+      next.messaging_guidance = (value || []).map((g) => ({ heading: g.heading || "", text: g.text || "" }));
+      next.messaging_ai_suggested = true;
+    }
     // Apply to local state; user saves explicitly via Customize or Save.
     setAudience((a) => ({ ...a, persona: next }));
+    setDirty(true);
   }
 
   async function buildFunnel() {
@@ -140,6 +148,11 @@ export default function AudienceDetail() {
           <Button variant="outline" onClick={() => setEditing(true)}><Pencil className="w-4 h-4 mr-1.5" /> Edit audience</Button>
           <Button variant="outline" onClick={() => setCustomizing(true)}><SlidersHorizontal className="w-4 h-4 mr-1.5" /> Customize card</Button>
           <Button variant="outline" onClick={() => setRefining(true)}><Sparkles className="w-4 h-4 mr-1.5" /> Refine with Roo</Button>
+          {dirty && (
+            <Button onClick={async () => { try { await savePersona(audience.persona); } catch {} }}>
+              <span className="w-2 h-2 rounded-full bg-amber-500 mr-1.5" /> Save changes
+            </Button>
+          )}
           <div className="flex-1" />
           <Button variant="ghost" size="sm" onClick={copySummary}><Copy className="w-4 h-4 mr-1.5" /> Copy summary</Button>
           <Button variant="ghost" size="sm" onClick={downloadPng} disabled={exporting}>
@@ -228,6 +241,11 @@ function summaryText(d) {
   if (d.frustrations.length) { lines.push("FRUSTRATIONS"); d.frustrations.forEach((g) => lines.push(`  • ${g}`)); lines.push(""); }
   if (d.objections.length) { lines.push("OBJECTIONS"); d.objections.forEach((g) => lines.push(`  • ${g}`)); lines.push(""); }
   if (d.buyingStyle.length) { lines.push("BUYING STYLE (team assumptions)"); d.buyingStyle.forEach((b) => lines.push(`  ${b.left} ↔ ${b.right} (${b.position})`)); lines.push(""); }
+  if (d.messagingGuidance.length) {
+    lines.push(`MESSAGING GUIDANCE${d.meta.messagingAiSuggested ? " (Suggested by Roo — reviewed)" : ""}`);
+    d.messagingGuidance.forEach((g) => lines.push(`  ${g.heading ? `${g.heading}: ` : ""}${g.text}`));
+    lines.push("");
+  }
   if (d.alternatives.length) { lines.push("CURRENT TOOLS & ALTERNATIVES"); d.alternatives.forEach((g) => lines.push(`  • ${g}`)); lines.push(""); }
   lines.push(`Prepared with FunnelRoo · Rev ${d.meta.revision ? d.meta.revision.slice(0, 8) : "—"} · Updated ${d.meta.updatedAt} · ${d.meta.reviewLabel}${d.meta.stale ? " · Needs refresh" : ""}`);
   return lines.join("\n");

@@ -44,6 +44,19 @@ export default function PersonaCustomize({ open, persona, onClose, onSave }) {
   function removeBuying(i) {
     setForm((f) => ({ ...f, buying_style: (f.buying_style || []).filter((_, idx) => idx !== i) }));
   }
+  function setMessaging(i, key, val) {
+    setForm((f) => {
+      const arr = [...(f.messaging_guidance || [])];
+      arr[i] = { ...arr[i], [key]: val };
+      return { ...f, messaging_guidance: arr };
+    });
+  }
+  function addMessaging() {
+    setForm((f) => ({ ...f, messaging_guidance: [...(f.messaging_guidance || []), { heading: "", text: "" }] }));
+  }
+  function removeMessaging(i) {
+    setForm((f) => ({ ...f, messaging_guidance: (f.messaging_guidance || []).filter((_, idx) => idx !== i) }));
+  }
 
   async function save() {
     setSaving(true);
@@ -151,6 +164,26 @@ export default function PersonaCustomize({ open, persona, onClose, onSave }) {
                 </div>
               ))}
             </div>
+          </div>
+
+          <div className="pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-slate-500">Messaging guidance (optional)</Label>
+              <Button size="sm" variant="ghost" onClick={addMessaging}><Plus className="w-3.5 h-3.5" /></Button>
+            </div>
+            <div className="space-y-2 mt-1.5">
+              {(form.messaging_guidance || []).map((g, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <Input value={g.heading || ""} onChange={(e) => setMessaging(i, "heading", e.target.value)} placeholder="Heading" className="w-36" />
+                  <Textarea value={g.text || ""} onChange={(e) => setMessaging(i, "text", e.target.value)} rows={2} placeholder="Guidance note" className="flex-1" />
+                  <Button size="sm" variant="ghost" onClick={() => removeMessaging(i)}><X className="w-3.5 h-3.5" /></Button>
+                </div>
+              ))}
+            </div>
+            <label className="flex items-center gap-2 mt-2 text-xs text-slate-500">
+              <input type="checkbox" checked={!!form.messaging_ai_suggested} onChange={(e) => set("messaging_ai_suggested", e.target.checked)} />
+              Marked as Roo-suggested origin
+            </label>
           </div>
 
           <div className="pt-2 border-t border-slate-100">

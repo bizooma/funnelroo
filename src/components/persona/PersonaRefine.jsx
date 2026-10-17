@@ -75,7 +75,17 @@ export default function PersonaRefine({ open, audienceId, currentRevision, onClo
               <Suggestion label="Bio summary" value={draft.bio_summary} multiline onApply={() => apply("bio_summary")} field="bio_summary" />
               <Suggestion label="Representative statement" value={draft.representative_statement} multiline onApply={() => apply("representative_statement")} field="quote" note="Applied as an illustrative statement — not a customer quote." />
               <Suggestion label="Motivation labels" value={(draft.motivation_labels || []).join(", ")} onApply={() => apply("motivation_labels")} field="motivations" />
-              <Suggestion label="Messaging guidance" value={(draft.messaging_guidance || []).join("\n• ")} multiline onApply={() => apply("messaging_guidance")} field="messaging" note="Reference only — not stored on the card." />
+              <Suggestion
+                label="Messaging guidance"
+                value={(draft.messaging_guidance || []).map((g) => `${g.heading ? `${g.heading}: ` : ""}${g.text}`).join("\n")}
+                multiline
+                onApply={() => {
+                  if (!draft?.messaging_guidance?.length) return;
+                  onApply("messaging", draft.messaging_guidance);
+                  toast({ title: "Applied — review and save" });
+                }}
+                note="Stored on the card as team messaging guidance. Origin: Suggested by Roo."
+              />
               {draft.notes && <div className="text-xs text-slate-400 italic">{draft.notes}</div>}
             </div>
           )}

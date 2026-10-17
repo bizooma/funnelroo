@@ -35,13 +35,14 @@ function PersonaCard({ data, meta }, ref) {
   const hasPortrait = data.portrait?.url;
   const motivations = (data.motivations || []).filter((m) => m.label);
   const buyingStyle = (data.buyingStyle || []).filter((b) => b.left && b.right && b.position != null);
+  const messagingGuidance = (data.messagingGuidance || []).filter((g) => g.text);
   const goals = data.goals || [];
   const frustrations = data.frustrations || [];
   const objections = data.objections || [];
   const alternatives = data.alternatives || [];
   const bio = data.bio;
 
-  const hasRight = goals.length || frustrations.length || objections.length || alternatives.length || buyingStyle.length;
+  const hasRight = goals.length || frustrations.length || objections.length || alternatives.length || buyingStyle.length || messagingGuidance.length;
 
   return (
     <div
@@ -158,6 +159,22 @@ function PersonaCard({ data, meta }, ref) {
               </div>
             )}
             {alternatives.length > 0 && <BulletSection title="Current tools & alternatives" items={alternatives} />}
+            {messagingGuidance.length > 0 && (
+              <div>
+                <SectionLabel>Messaging guidance</SectionLabel>
+                {meta.messagingAiSuggested && (
+                  <div className="mt-1 uppercase tracking-wide text-amber-600" style={{ fontSize: "10px" }}>Suggested by Roo — reviewed</div>
+                )}
+                <div className="mt-1.5 space-y-1.5">
+                  {messagingGuidance.map((g, i) => (
+                    <div key={i} style={{ fontSize: "12px" }}>
+                      {g.heading && <span className="font-semibold text-slate-800">{g.heading}: </span>}
+                      <span className="text-slate-700">{g.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
