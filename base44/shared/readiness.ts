@@ -11,12 +11,111 @@
 //   status: "ready" | "needs_review" | "missing" | "not_started" | "not_needed"
 //   classification: "preparation" | "launch_required" | "optional"
 
-export function evaluateReadiness(funnel, draft, opts) {
+// ---- Types ----
+
+type FunnelType = "lead_magnet" | "direct_booking" | "service_inquiry";
+type ReadinessStatus = "ready" | "needs_review" | "missing" | "not_started" | "not_needed";
+type ReadinessClassification = "preparation" | "launch_required" | "optional";
+
+interface ReadinessFunnel {
+  id?: string;
+  type?: FunnelType;
+  audience_id?: string;
+  offer_id?: string;
+}
+
+interface PageBlock {
+  type: string;
+  props?: Record<string, unknown>;
+}
+
+interface ReadinessDraft {
+  page_blocks?: PageBlock[];
+  booking_event_type_id?: string;
+  resource_version_id?: string;
+  delivery_mode?: "immediate_only" | "immediate_plus_email";
+  sender_id?: string;
+  sequence_ref?: string;
+  consent_text?: string;
+}
+
+interface ReadinessItem {
+  id: string;
+  status: ReadinessStatus;
+  reason: string;
+  action: string;
+  required: boolean;
+  classification: ReadinessClassification;
+}
+
+interface ReadinessResult {
+  preparation: ReadinessItem[];
+  launch_required: ReadinessItem[];
+  optional: ReadinessItem[];
+  canPublish: boolean;
+  launchBlocked: boolean;
+  optionalBlocked: boolean;
+  preparationReady: boolean;
+}
+
+interface DashboardProfile {
+  business_name?: string;
+  primary_service?: string;
+}
+
+interface DashboardAudience {
+  status?: "draft" | "ready" | "archived";
+  approved?: boolean;
+}
+
+interface DashboardOffer {
+  status?: "draft" | "ready" | "archived";
+  approved?: boolean;
+}
+
+interface DashboardFunnel {
+  id: string;
+  name: string;
+  state: "draft" | "published" | "paused" | "archived";
+}
+
+interface DashboardSetupSession {
+  id: string;
+  funnel_name?: string;
+  step?: string;
+  completed?: boolean;
+  abandoned?: boolean;
+}
+
+interface DashboardState {
+  profile?: DashboardProfile;
+  audiences?: DashboardAudience[];
+  offers?: DashboardOffer[];
+  funnels?: DashboardFunnel[];
+  setupSessions?: DashboardSetupSession[];
+}
+
+interface DashboardNextAction {
+  label: string;
+  destination: string;
+}
+
+interface DashboardActionResult {
+  mode: "operational" | "launch_guide";
+  heading: string | null;
+  subheading: string | null;
+  nextAction: DashboardNextAction | null;
+  progress: { stage: string };
+}
+
+// ---- Functions ----
+
+export function evaluateReadiness(funnel: ReadinessFunnel, draft: ReadinessDraft, opts?: Record<string, unknown>): ReadinessResult {
   const type = funnel?.type || "lead_magnet";
   const blocks = draft?.page_blocks || [];
-  const hasForm = blocks.some((b) => b.type === "form");
-  const hasHero = blocks.some((b) => b.type === "hero");
-  const hasBookingBlock = blocks.some((b) => b.type === "booking" && b.props?.calendly_url);
+  const hasForm = blocks.some((b: PageBlock) => b.type === "form");
+  const hasHero = blocks.some((b: PageBlock) => b.type === "hero");
+  const hasBookingBlock = blocks.some((b: PageBlock) => b.type === "booking" && b.props?.calendly_url);
   const hasBookingEventType = !!draft?.booking_event_type_id;
   const hasResourceVersion = !!draft?.resource_version_id;
   const deliveryMode = draft?.delivery_mode || "immediate_only";
@@ -26,11 +125,11 @@ export function evaluateReadiness(funnel, draft, opts) {
   const hasOffer = !!funnel?.offer_id;
   const hasConsent = !!draft?.consent_text;
   const funnelId = funnel?.id || "";
-  const action = (path) => funnelId ? `/funnels/${funnelId}` : "/funnels";
+  const action = (path: string) => funnelId ? `/funnels/${funnelId}` : "/funnels";
 
-  const preparation = [];
-  const launchRequired = [];
-  const optional = [];
+  const preparation: ReadinessItem[] = [];
+  const launchRequired: ReadinessItem[] = [];
+  const optional: ReadinessItem[] = [];
 
   // ---- PREPARATION ----
   preparation.push({
@@ -176,23 +275,24 @@ export function evaluateReadiness(funnel, draft, opts) {
 
 // Determine the next useful action for the dashboard based on actual saved state.
 // Returns { heading, subheading, action_label, action_destination, progress }
-export function nextDashboardAction(state) {
+export function nextDashboardAction(state: DashboardState): DashboardActionResult {
   const { profile, audiences, offers, funnels, setupSessions } = state;
 
   const hasBusinessBasics = !!(profile?.business_name || profile?.primary_service);
-  const readyAudiences = (audiences || []).filter((a) => a.status === "ready" || a.approved);
-  const draftAudiences = (audiences || []).filter((a) => a.status === "draft" && !a.approved);
-  const readyOffers = (offers || []).filter((o) => o.status === "ready" || o.approved);
-  const draftOffers = (offers || []).filter((o) => o.status === "draft" && !o.approved);
-  const publishedFunnels = (funnels || []).filter((f) => f.state === "published");
-  const draftFunnels = (funnels || []).filter((f) => f.state === "draft");
-  const activeSetupSessions = (setupSessions || []).filter((s) => !s.completed && !s.abandoned);
+  const readyAudiences = (audiences || []).filter((a: DashboardAudience) => a.status === "ready" || a.approved);
+  const draftAudiences = (audiences || []).filter((a: DashboardAudience) => a.status === "draft" && !a.approved);
+  const readyOffers = (offers || []).filter((o: DashboardOffer) => o.status === "ready" || o.approved);
+  const draftOffers = (offers || []).filter((o: DashboardOffer) => o.status === "draft" && !o.approved);
+  const publishedFunnels = (funnels || []).filter((f: DashboardFunnel) => f.state === "published");
+  const draftFunnels = (funnels || []).filter((f: DashboardFunnel) => f.state === "draft");
+  const activeSetupSessions = (setupSessions || []).filter((s: DashboardSetupSession) => !s.completed && !s.abandoned);
 
   // If workspace has a live funnel, show operational dashboard
   if (publishedFunnels.length > 0) {
     return {
       mode: "operational",
       heading: null, // operational dashboard doesn't use the launch guide
+      subheading: null,
       nextAction: null,
       progress: { stage: "launched" },
     };
@@ -201,7 +301,7 @@ export function nextDashboardAction(state) {
   // Launch guide mode — determine the next action
   let heading = "Let's build your first funnel.";
   let subheading = "Start with who you want to reach and what you're offering. Roo will help you prepare the content and turn it into a funnel.";
-  let nextAction = null;
+  let nextAction: DashboardNextAction | null = null;
   let stage = "prepare";
 
   // Priority: explicitly resumed setup > preparation steps > continue drafts > build new
