@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useWorkspace } from "@/lib/workspaceContext";
 import { base44 } from "@/api/base44Client";
 import AppShell from "@/components/AppShell";
@@ -10,9 +10,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
-import { toast } from "@/components/ui/use-toast";
 import {
-  Check, ArrowRight, ArrowLeft, Loader2, Sparkles, FileText, CalendarCheck, MessageSquare, Package,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { toast } from "@/components/ui/use-toast";
+import PersonaCard from "@/components/persona/PersonaCard";
+import { buildCardData } from "@/components/persona/buildCardData";
+import {
+  Check, ArrowRight, ArrowLeft, Loader2, Sparkles, FileText, CalendarCheck, MessageSquare, Package, Eye,
 } from "lucide-react";
 
 const STEPS = [
@@ -48,6 +53,7 @@ export default function GuidedSetup() {
   const [brief, setBrief] = useState({ profile: {}, audiences: [], offers: [] });
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [personaView, setPersonaView] = useState(null); // { audience, profile }
 
   useEffect(() => {
     if (!current) return;
@@ -82,6 +88,11 @@ export default function GuidedSetup() {
             }));
           }
         }
+        // An explicitly chosen audience (e.g. from "Build a funnel for this
+        // audience") preselects it, taking precedence over a resumed session's
+        // prior choice.
+        const audParam = params.get("audience");
+        if (audParam) setForm((f) => ({ ...f, audience_id: audParam }));
       } catch {}
     })();
   }, [current, sessionId]);
@@ -264,6 +275,16 @@ export default function GuidedSetup() {
                   createLabel="Create an audience"
                   renderSummary={(a) => a.roles_industries || a.name}
                 />
+                {form.audience_id && (
+                  <Button size="sm" variant="outline" onClick={async () => {
+                    try {
+                      const res = await base44.functions.invoke("marketingKitAccess", { action: "getAudience", workspace_id: current.id, id: form.audience_id });
+                      setPersonaView({ audience: res.data?.audience, profile: res.data?.profile });
+                    } catch (e) {
+                      toast({ title: "Could not load persona", variant: "destructive" });
+                    }
+                  }}><Eye className="w-3.5 h-3.5 mr-1.5" /> View persona card</Button>
+                )}
                 <div className="flex items-center gap-2">
                   <RooPanel title="Help me define my audience" action="draftAudience" onApply={(d) => {
                     if (d.name) {
@@ -379,6 +400,23 @@ export default function GuidedSetup() {
           )}
         </div>
       </div>
+
+      {personaView && (
+        <Dialog open onOpenChange={() => setPersonaView(null)}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Persona card — {personaView.audience?.name}</DialogTitle>
+            </DialogHeader>
+            <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
+              <PersonaCard data={buildCardData(personaView.audience, personaView.profile)} meta={buildCardData(personaView.audience, personaView.profile).meta} />
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setPersonaView(null)}>Close</Button>
+              <Link to={`/marketing-kit/audiences/${personaView.audience?.id}`}><Button>Open full card</Button></Link>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </AppShell>
   );
 }

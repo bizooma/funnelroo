@@ -6,8 +6,61 @@ import {
   ok,
   err,
   HttpError,
+  stableStringify,
 } from "../../shared/auth.ts";
 import { evaluateReadiness, nextDashboardAction } from "../../shared/readiness.ts";
+
+// Deterministic hash of the core audience facts that a persona card reflects.
+// When these change, previously generated persona guidance is flagged stale.
+function audienceContentHash(a) {
+  const core = {
+    name: a.name || "",
+    roles_industries: a.roles_industries || "",
+    problems: a.problems || [],
+    desired_outcomes: a.desired_outcomes || [],
+    objections: a.objections || [],
+    alternatives: a.alternatives || [],
+    description: a.description || "",
+  };
+  return stableStringify(core).slice(0, 40);
+}
+
+// Allowlist + light validation for the persona presentation object.
+const PERSONA_KEYS = [
+  "title", "subtitle", "role", "industry", "company_size", "location",
+  "buying_role", "age", "family", "portrait_url", "portrait_credit",
+  "quote_text", "quote_source", "quote_kind", "bio_summary",
+  "motivations", "buying_style", "theme", "highlights_only",
+];
+function sanitizePersona(input) {
+  if (!input || typeof input !== "object") return undefined;
+  const out = {};
+  for (const k of PERSONA_KEYS) {
+    if (input[k] !== undefined) out[k] = input[k];
+  }
+  if (out.quote_kind && !["customer", "representative", "illustrative"].includes(out.quote_kind)) {
+    delete out.quote_kind;
+  }
+  if (Array.isArray(out.motivations)) {
+    out.motivations = out.motivations.slice(0, 6).map((m) => ({
+      label: String(m.label || "").slice(0, 80),
+      explanation: String(m.explanation || "").slice(0, 200),
+      rating: Number.isFinite(m.rating) && m.rating >= 1 && m.rating <= 5 ? Math.round(m.rating) : null,
+    })).filter((m) => m.label);
+  }
+  if (Array.isArray(out.buying_style)) {
+    out.buying_style = out.buying_style.slice(0, 6).map((b) => ({
+      pair_label: String(b.pair_label || "").slice(0, 80),
+      left: String(b.left || "").slice(0, 60),
+      right: String(b.right || "").slice(0, 60),
+      position: Number.isFinite(b.position) ? Math.max(0, Math.min(100, Math.round(b.position))) : null,
+    })).filter((b) => b.left && b.right);
+  }
+  if (out.theme && typeof out.theme === "object") {
+    out.theme = { accent: String(out.theme.accent || "").slice(0, 20), preset: String(out.theme.preset || "").slice(0, 40) };
+  }
+  return out;
+}
 
 export default async function (req) {
   try {
@@ -110,7 +163,14 @@ export default async function (req) {
         if (existing.workspace_id !== body.workspace_id) {
           return err(403, "Audience not in this workspace");
         }
-        audience = await sr.entities.Audience.update(body.id, { ...data, name: body.name });
+        // If core facts changed and a persona card exists, flag it stale.
+        const merged = { ...existing, ...data, name: body.name };
+        const newHash = audienceContentHash(merged);
+        const personaUpdate = {};
+        if (existing.persona && existing.persona.content_hash && existing.persona.content_hash !== newHash) {
+          personaUpdate.persona = { ...existing.persona, stale: true };
+        }
+        audience = await sr.entities.Audience.update(body.id, { ...data, name: body.name, ...personaUpdate });
       } else {
         audience = await sr.entities.Audience.create({
           workspace_id: body.workspace_id,
@@ -277,6 +337,42 @@ export default async function (req) {
         });
       }
       return ok({ profile: result });
+    }
+
+    // ---- getAudience: single audience + workspace branding for the persona card ----
+    if (action === "getAudience") {
+      await requireMembership(base44, body.workspace_id);
+      const audience = firstRecord(
+        await sr.entities.Audience.filter({ id: body.id, workspace_id: body.workspace_id })
+      );
+      if (!audience) return err(404, "Audience not found");
+      const profile = firstRecord(
+        await sr.entities.BusinessProfile.filter({ workspace_id: body.workspace_id })
+      );
+      return ok({ audience, profile });
+    }
+
+    // ---- savePersonaCard: presentation-only metadata for an audience ----
+    // Does not touch reviewed core facts; presentation changes do not invalidate review.
+    if (action === "savePersonaCard") {
+      const { user } = await requireMembership(base44, body.workspace_id, ["owner", "admin", "member"]);
+      const existing = firstRecord(
+        await sr.entities.Audience.filter({ id: body.id, workspace_id: body.workspace_id })
+      );
+      if (!existing) return err(404, "Audience not found");
+      const sanitized = sanitizePersona(body.persona) || {};
+      const contentHash = audienceContentHash(existing);
+      const persona = {
+        ...(existing.persona || {}),
+        ...sanitized,
+        content_hash: contentHash,
+        source_revision: contentHash,
+        stale: false,
+        updated_at: new Date().toISOString(),
+        updated_by: user.id,
+      };
+      const updated = await sr.entities.Audience.update(body.id, { persona });
+      return ok({ audience: updated });
     }
 
     // ---- evaluateReadiness: shared template-aware readiness for a funnel ----

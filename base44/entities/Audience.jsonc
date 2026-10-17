@@ -65,6 +65,130 @@
     },
     "source_id": {
       "type": "string"
+    },
+    "persona": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "industry": {
+          "type": "string"
+        },
+        "company_size": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "buying_role": {
+          "type": "string"
+        },
+        "age": {
+          "type": "string"
+        },
+        "family": {
+          "type": "string"
+        },
+        "portrait_url": {
+          "type": "string"
+        },
+        "portrait_credit": {
+          "type": "string"
+        },
+        "quote_text": {
+          "type": "string"
+        },
+        "quote_source": {
+          "type": "string"
+        },
+        "quote_kind": {
+          "type": "string",
+          "enum": [
+            "customer",
+            "representative",
+            "illustrative"
+          ]
+        },
+        "bio_summary": {
+          "type": "string"
+        },
+        "motivations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "explanation": {
+                "type": "string"
+              },
+              "rating": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "buying_style": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pair_label": {
+                "type": "string"
+              },
+              "left": {
+                "type": "string"
+              },
+              "right": {
+                "type": "string"
+              },
+              "position": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "theme": {
+          "type": "object",
+          "properties": {
+            "accent": {
+              "type": "string"
+            },
+            "preset": {
+              "type": "string"
+            }
+          }
+        },
+        "highlights_only": {
+          "type": "boolean",
+          "default": false
+        },
+        "content_hash": {
+          "type": "string"
+        },
+        "source_revision": {
+          "type": "string"
+        },
+        "stale": {
+          "type": "boolean",
+          "default": false
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_by": {
+          "type": "string"
+        }
+      }
     }
   },
   "required": [

@@ -1,5 +1,15 @@
 import { createClientFromRequest } from "npm:@base44/sdk@0.8.52";
-import { requireMembership, firstRecord, asArray, ok, err, HttpError } from "../../shared/auth.ts";
+import { requireMembership, firstRecord, asArray, ok, err, HttpError, stableStringify } from "../../shared/auth.ts";
+
+function audienceContentHash(a) {
+  const core = {
+    name: a.name || "", roles_industries: a.roles_industries || "",
+    problems: a.problems || [], desired_outcomes: a.desired_outcomes || [],
+    objections: a.objections || [], alternatives: a.alternatives || [],
+    description: a.description || "",
+  };
+  return stableStringify(core).slice(0, 40);
+}
 
 // Roo: the contextual assistant. Drafts content from the approved brief only.
 // Never invents testimonials, results, qualifications, deadlines or scarcity.
@@ -254,6 +264,53 @@ Return JSON matching this schema: ${JSON.stringify(schema)}`;
         response_json_schema: schema,
       });
       return ok({ suggestion: result });
+    }
+
+    // ---- refinePersona: structured suggestions for a persona card ----
+    // Returns editable suggestions with provenance, based ONLY on the selected
+    // audience revision. Never invents demographics, quotes, budgets or traits.
+    if (action === "refinePersona") {
+      const audience = contextAudiences[0];
+      if (!audience) return err(404, "Audience not found or not approved for tailored content");
+      const schema = {
+        type: "object",
+        properties: {
+          archetype_title: { type: "string" },
+          bio_summary: { type: "string" },
+          representative_statement: { type: "string" },
+          motivation_labels: { type: "array", items: { type: "string" } },
+          messaging_guidance: { type: "array", items: { type: "string" } },
+          notes: { type: "string" },
+        },
+      };
+      const prompt = `${SYSTEM_RULES}
+
+${briefText}
+
+Selected audience (the ONLY audience to use):
+- Name: ${audience.name}
+- Who they are: ${audience.roles_industries || "(not specified)"}
+- Problems: ${JSON.stringify(audience.problems || [])}
+- Desired outcomes: ${JSON.stringify(audience.desired_outcomes || [])}
+- Objections: ${JSON.stringify(audience.objections || [])}
+- Existing solutions: ${JSON.stringify(audience.alternatives || [])}
+
+Help present this audience as a one-page persona card for internal marketing reference.
+1. Suggest a short archetype title (e.g. "The Hands-On Agency Owner"). Do NOT invent a personal name.
+2. Draft a 2-3 sentence factual bio summary from the audience profile above. Do not invent demographics, age, family, income or budget.
+3. Draft ONE representative statement in the audience's voice that reflects their stated problem or goal. This is an illustrative statement, NOT a customer quote.
+4. Suggest up to 6 purchasing-relevant motivation labels for this audience (labels only, no ratings).
+5. Offer 2-3 short messaging guidance notes for speaking to this audience.
+Mark anything inferred as an AI suggestion in the notes. Return JSON matching this schema: ${JSON.stringify(schema)}`;
+      const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
+        prompt,
+        response_json_schema: schema,
+      });
+      return ok({
+        draft: { ...result, provenance: "Suggested by Roo — review needed" },
+        source_revision: audienceContentHash(audience),
+        ai_suggested: true,
+      });
     }
 
     return err(400, `Unknown action: ${action}`);

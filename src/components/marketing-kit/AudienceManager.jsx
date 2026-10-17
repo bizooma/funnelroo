@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useWorkspace } from "@/lib/workspaceContext";
 import { base44 } from "@/api/base44Client";
 import { RooPanel } from "@/components/RooPanel";
@@ -12,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/use-toast";
 import {
-  Plus, Search, Loader2, Save, Copy, Archive, RotateCcw, Check, ChevronDown, ChevronUp, Sparkles,
+  Plus, Search, Loader2, Save, Copy, Archive, RotateCcw, Check, ChevronDown, ChevronUp, Sparkles, Eye,
 } from "lucide-react";
 
 export default function AudienceManager() {
@@ -124,6 +125,9 @@ function AudienceRow({ audience, canAdmin, onEdit, onDuplicate, onArchive, onRes
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <Link to={`/marketing-kit/audiences/${audience.id}`}>
+              <Button size="sm" variant="ghost" title="View persona card"><Eye className="w-3.5 h-3.5" /></Button>
+            </Link>
             <Button size="sm" variant="ghost" onClick={() => setExpanded(!expanded)}>
               {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </Button>
@@ -158,11 +162,12 @@ function Detail({ label, items }) {
   );
 }
 
-function AudienceEditor({ audience, onClose, onSaved }) {
+export function AudienceEditor({ audience, onClose, onSaved }) {
   const { current, canAdmin } = useWorkspace();
   const [form, setForm] = useState(audience);
   const [saving, setSaving] = useState(false);
   const [showOptional, setShowOptional] = useState(false);
+  const [justSaved, setJustSaved] = useState(null);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const setArr = (k, text) => set(k, text.split("\n").filter(Boolean));
@@ -183,7 +188,7 @@ function AudienceEditor({ audience, onClose, onSaved }) {
         status: status || form.status || "draft",
       });
       toast({ title: status === "ready" ? "Marked ready" : "Saved" });
-      onSaved(res.data?.audience);
+      setJustSaved(res.data?.audience || form);
     } catch (e) {
       toast({ title: "Save failed", description: e.response?.data?.error || e.message, variant: "destructive" });
       setSaving(false);
@@ -231,17 +236,28 @@ function AudienceEditor({ audience, onClose, onSaved }) {
             />
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button variant="outline" disabled={!form.name?.trim() || saving} onClick={() => save("draft")}>
-            <Save className="w-3.5 h-3.5 mr-1.5" /> Save draft
-          </Button>
-          {canAdmin && (
-            <Button disabled={!form.name?.trim() || saving} onClick={() => save("ready")}>
-              <Check className="w-3.5 h-3.5 mr-1.5" /> {saving ? "Saving…" : "Mark ready"}
+        {justSaved ? (
+          <div className="flex flex-col gap-3 py-1">
+            <div className="text-sm text-slate-600">Saved. What would you like to do next?</div>
+            <div className="flex flex-wrap gap-2">
+              <Link to={`/marketing-kit/audiences/${justSaved.id}`}><Button size="sm"><Eye className="w-3.5 h-3.5 mr-1.5" /> View persona card</Button></Link>
+              <Link to={`/guided-setup?audience=${justSaved.id}`}><Button size="sm" variant="outline"><Sparkles className="w-3.5 h-3.5 mr-1.5" /> Build a funnel for this audience</Button></Link>
+              <Button size="sm" variant="ghost" onClick={() => { onSaved(justSaved); }}>Done</Button>
+            </div>
+          </div>
+        ) : (
+          <DialogFooter>
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button variant="outline" disabled={!form.name?.trim() || saving} onClick={() => save("draft")}>
+              <Save className="w-3.5 h-3.5 mr-1.5" /> Save draft
             </Button>
-          )}
-        </DialogFooter>
+            {canAdmin && (
+              <Button disabled={!form.name?.trim() || saving} onClick={() => save("ready")}>
+                <Check className="w-3.5 h-3.5 mr-1.5" /> {saving ? "Saving…" : "Mark ready"}
+              </Button>
+            )}
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

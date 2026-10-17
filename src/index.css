@@ -95,6 +95,56 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Persona card print / Save as PDF: hide app chrome, show only the card. */
+@media print {
+  @page {
+    size: landscape;
+    margin: 0.5in;
+  }
+  body.printing-persona * {
+    visibility: hidden;
+  }
+  body.printing-persona .persona-print-root,
+  body.printing-persona .persona-print-root * {
+    visibility: visible;
+  }
+  body.printing-persona .persona-print-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  body.printing-persona .persona-card {
+    max-width: 100% !important;
+  }
+}
+
+/* Persona card responsive columns: 3 → 2 → 1 */
+.persona-grid-3 {
+  grid-template-columns: 38fr 34fr 28fr;
+}
+.persona-grid-2 {
+  grid-template-columns: 38fr 34fr;
+}
+@media (max-width: 900px) {
+  .persona-grid-3, .persona-grid-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+  .persona-col-right {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 640px) {
+  .persona-grid-3, .persona-grid-2 {
+    grid-template-columns: 1fr;
+  }
+  .persona-col-right {
+    grid-column: auto;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
