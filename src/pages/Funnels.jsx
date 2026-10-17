@@ -91,7 +91,12 @@ export default function Funnels() {
         {filtered.length === 0 ? (
           <div className="border border-dashed border-slate-200 rounded-2xl p-12 text-center">
             <p className="text-sm text-slate-500">{funnels.length === 0 ? "No funnels yet." : "No matches."}</p>
-            {funnels.length === 0 && <Button className="mt-4" onClick={() => setOpen(true)}><Plus className="w-4 h-4 mr-1.5" /> Create your first funnel</Button>}
+            {funnels.length === 0 && (
+              <>
+                <Button className="mt-4" onClick={() => setOpen(true)}><Plus className="w-4 h-4 mr-1.5" /> Create your first funnel</Button>
+                <img src="https://media.base44.com/images/public/6acba9de240facdd95f5665d/4db421849_point-up.png" alt="Roo pointing up" className="mx-auto mt-6 h-32 w-auto" />
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-2.5">
