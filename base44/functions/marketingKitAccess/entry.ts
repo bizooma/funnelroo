@@ -6,24 +6,9 @@ import {
   ok,
   err,
   HttpError,
-  stableStringify,
+  audienceContentHash,
 } from "../../shared/auth.ts";
 import { evaluateReadiness, nextDashboardAction } from "../../shared/readiness.ts";
-
-// Deterministic hash of the core audience facts that a persona card reflects.
-// When these change, previously generated persona guidance is flagged stale.
-function audienceContentHash(a) {
-  const core = {
-    name: a.name || "",
-    roles_industries: a.roles_industries || "",
-    problems: a.problems || [],
-    desired_outcomes: a.desired_outcomes || [],
-    objections: a.objections || [],
-    alternatives: a.alternatives || [],
-    description: a.description || "",
-  };
-  return stableStringify(core).slice(0, 40);
-}
 
 // Allowlist + light validation for the persona presentation object.
 const PERSONA_KEYS = [
@@ -373,11 +358,20 @@ export default async function (req) {
       const profile = firstRecord(
         await sr.entities.BusinessProfile.filter({ workspace_id: body.workspace_id })
       );
-      return ok({ audience, profile });
+      // Expose the current audience revision so the card page can pass it back
+      // as expected_revision when recording an explicit review. This lets the
+      // backend validate that the audience didn't change during the review.
+      return ok({ audience, profile, audience_revision: audienceContentHash(audience) });
     }
 
-    // ---- savePersonaCard: presentation-only metadata for an audience ----
-    // Does not touch reviewed core facts; presentation changes do not invalidate review.
+    // ---- savePersonaCard: persist persona presentation edits ----
+    // A normal save persists edits but does NOT change review state: it never
+    // clears staleness or records a review. Changing one generated field
+    // (e.g. bio) must not implicitly approve other unchanged generated
+    // sections (messaging guidance, quote, motivations) that still need
+    // review after an audience change. Review is a separate explicit action
+    // (reviewPersonaCard). Origin (messaging_ai_suggested) is also separate
+    // and never implies reviewed.
     if (action === "savePersonaCard") {
       const { user } = await requireMembership(base44, body.workspace_id, ["owner", "admin", "member"]);
       const existing = firstRecord(
@@ -393,20 +387,65 @@ export default async function (req) {
         updated_at: new Date().toISOString(),
         updated_by: user.id,
       };
-      if (generatedFieldsChanged(sanitized, prev)) {
-        // A review of generated content: rebind to the current audience revision.
+      if (!prev.content_hash) {
+        // First card save: bind to the current revision so future audience
+        // changes can be detected. No review is recorded yet.
         persona.content_hash = newHash;
         persona.source_revision = newHash;
         persona.stale = false;
       } else {
-        // Cosmetic-only save: preserve the revision the content was last
-        // reviewed against and any existing staleness warning.
+        // Preserve the revision the content was last bound to and any existing
+        // staleness warning. Edits alone don't re-approve content. If generated
+        // content changed after a prior explicit review, that review no longer
+        // covers the modified content, so it is invalidated (needs re-review).
         persona.content_hash = prev.content_hash;
         persona.source_revision = prev.source_revision;
         persona.stale = prev.stale ?? false;
+        if (generatedFieldsChanged(sanitized, prev) && prev.reviewed_revision) {
+          persona.reviewed_revision = null;
+          persona.reviewed_at = null;
+          persona.reviewed_by = null;
+        }
       }
       const updated = await sr.entities.Audience.update(body.id, { persona });
       return ok({ audience: updated });
+    }
+
+    // ---- reviewPersonaCard: explicit "Review & mark up to date" ----
+    // Covers ALL affected persona content (bio, messaging guidance,
+    // quotations, motivations) against the displayed audience revision.
+    // Separate from saving and from marking the audience Ready to use; it
+    // introduces no new global approval workflow. The revision the user
+    // reviewed against is validated server-side: if the audience changed
+    // while the review was open, the warning is NOT cleared — the user must
+    // reload and review against the newer revision.
+    if (action === "reviewPersonaCard") {
+      const { user } = await requireMembership(base44, body.workspace_id, ["owner", "admin", "member"]);
+      const existing = firstRecord(
+        await sr.entities.Audience.filter({ id: body.id, workspace_id: body.workspace_id })
+      );
+      if (!existing) return err(404, "Audience not found");
+      const currentHash = audienceContentHash(existing);
+      const expected = body.expected_revision;
+      if (expected && expected !== currentHash) {
+        // Audience changed since the user opened the card. Preserve any edits
+        // already saved; do not clear the warning. Require a fresh review.
+        return ok({ audience: existing, audience_changed: true });
+      }
+      const prev = existing.persona || {};
+      const persona = {
+        ...prev,
+        content_hash: currentHash,
+        source_revision: currentHash,
+        reviewed_revision: currentHash,
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: user.id,
+        stale: false,
+        updated_at: new Date().toISOString(),
+        updated_by: user.id,
+      };
+      const updated = await sr.entities.Audience.update(body.id, { persona });
+      return ok({ audience: updated, audience_changed: false });
     }
 
     // ---- evaluateReadiness: shared template-aware readiness for a funnel ----

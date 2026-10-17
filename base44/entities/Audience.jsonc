@@ -199,6 +199,16 @@
           "type": "boolean",
           "default": false
         },
+        "reviewed_revision": {
+          "type": "string"
+        },
+        "reviewed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "reviewed_by": {
+          "type": "string"
+        },
         "updated_at": {
           "type": "string",
           "format": "date-time"

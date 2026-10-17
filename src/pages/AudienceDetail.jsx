@@ -26,6 +26,7 @@ export default function AudienceDetail() {
   const [editing, setEditing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [audienceRevision, setAudienceRevision] = useState(null);
   const cardRef = useRef(null);
 
   async function load() {
@@ -35,6 +36,7 @@ export default function AudienceDetail() {
       const res = await base44.functions.invoke("marketingKitAccess", { action: "getAudience", workspace_id: current.id, id });
       setAudience(res.data?.audience);
       setProfile(res.data?.profile);
+      setAudienceRevision(res.data?.audience_revision);
       setDirty(false);
     } catch (e) {
       toast({ title: "Load failed", description: e.response?.data?.error || e.message, variant: "destructive" });
@@ -53,6 +55,9 @@ export default function AudienceDetail() {
   const cardData = buildCardData(audience, profile);
   const persona = audience.persona || {};
   const currentRevision = persona.content_hash;
+  const hasGeneratedContent = !!(persona.bio_summary || persona.messaging_guidance?.length || persona.quote_text || persona.motivations?.length);
+  const reviewed = !!persona.reviewed_revision && !persona.stale;
+  const needsReview = hasGeneratedContent && !reviewed;
 
   async function savePersona(next) {
     try {
@@ -68,6 +73,31 @@ export default function AudienceDetail() {
     } catch (e) {
       toast({ title: "Save failed", description: e.response?.data?.error || e.message, variant: "destructive" });
       throw e;
+    }
+  }
+
+  // Explicit "Review & mark up to date": covers all affected persona content
+  // (bio, messaging guidance, quotations, motivations) against the displayed
+  // audience revision. Separate from saving and from marking the audience
+  // Ready to use. The backend validates the revision; if the audience changed
+  // while the review was open, the warning is not cleared.
+  async function reviewPersona() {
+    try {
+      const res = await base44.functions.invoke("marketingKitAccess", {
+        action: "reviewPersonaCard",
+        workspace_id: current.id,
+        id: audience.id,
+        expected_revision: audienceRevision,
+      });
+      if (res.data?.audience_changed) {
+        toast({ title: "Audience changed", description: "Reload and review against the updated profile.", variant: "destructive" });
+        load();
+        return;
+      }
+      setAudience(res.data?.audience);
+      toast({ title: "Marked up to date" });
+    } catch (e) {
+      toast({ title: "Review failed", description: e.response?.data?.error || e.message, variant: "destructive" });
     }
   }
 
@@ -148,6 +178,11 @@ export default function AudienceDetail() {
           <Button variant="outline" onClick={() => setEditing(true)}><Pencil className="w-4 h-4 mr-1.5" /> Edit audience</Button>
           <Button variant="outline" onClick={() => setCustomizing(true)}><SlidersHorizontal className="w-4 h-4 mr-1.5" /> Customize card</Button>
           <Button variant="outline" onClick={() => setRefining(true)}><Sparkles className="w-4 h-4 mr-1.5" /> Refine with Roo</Button>
+          {needsReview && (
+            <Button variant="outline" onClick={reviewPersona}>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 mr-1.5" /> Review & mark up to date
+            </Button>
+          )}
           {dirty && (
             <Button onClick={async () => { try { await savePersona(audience.persona); } catch {} }}>
               <span className="w-2 h-2 rounded-full bg-amber-500 mr-1.5" /> Save changes
@@ -165,7 +200,15 @@ export default function AudienceDetail() {
           <div className="flex items-start gap-2 mb-4 text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-3">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
             <div>
-              <span className="font-medium">Needs refresh.</span> The audience profile changed since this card was last customized. Review and re-save the card, or ask Roo to refine it again.
+              <span className="font-medium">Needs refresh.</span> The audience profile changed since this card was last reviewed. Review all affected content (bio, messaging guidance, quotations, motivations) against the updated profile, then use “Review & mark up to date”. Saving edits alone won't clear this.
+            </div>
+          </div>
+        )}
+        {needsReview && !persona.stale && (
+          <div className="flex items-start gap-2 mb-4 text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-3">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
+            <div>
+              <span className="font-medium">Review the generated content.</span> Use “Review & mark up to date” once you've confirmed the bio, messaging guidance, quotations, and motivations against this audience. This is separate from marking the audience Ready to use.
             </div>
           </div>
         )}
@@ -205,7 +248,7 @@ export default function AudienceDetail() {
         <AudienceEditor
           audience={audience}
           onClose={() => setEditing(false)}
-          onSaved={(updated) => { setEditing(false); setAudience(updated); }}
+          onSaved={() => { setEditing(false); load(); }}
         />
       )}
     </AppShell>
@@ -242,7 +285,7 @@ function summaryText(d) {
   if (d.objections.length) { lines.push("OBJECTIONS"); d.objections.forEach((g) => lines.push(`  • ${g}`)); lines.push(""); }
   if (d.buyingStyle.length) { lines.push("BUYING STYLE (team assumptions)"); d.buyingStyle.forEach((b) => lines.push(`  ${b.left} ↔ ${b.right} (${b.position})`)); lines.push(""); }
   if (d.messagingGuidance.length) {
-    lines.push(`MESSAGING GUIDANCE${d.meta.messagingAiSuggested ? " (Suggested by Roo — reviewed)" : ""}`);
+    lines.push(`MESSAGING GUIDANCE${d.meta.messagingAiSuggested ? " (Suggested by Roo)" : ""}`);
     d.messagingGuidance.forEach((g) => lines.push(`  ${g.heading ? `${g.heading}: ` : ""}${g.text}`));
     lines.push("");
   }

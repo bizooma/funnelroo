@@ -86,6 +86,23 @@ export function stableStringify(obj) {
   return "{" + keys.map((k) => JSON.stringify(k) + ":" + stableStringify(obj[k])).join(",") + "}";
 }
 
+// Deterministic hash of the core audience facts a persona card reflects.
+// When these change, previously generated persona guidance is flagged stale.
+// Uses the full stable serialization so ANY core-field change is detected
+// (a truncated hash would miss fields beyond the truncation point).
+export function audienceContentHash(a) {
+  const core = {
+    name: a.name || "",
+    roles_industries: a.roles_industries || "",
+    problems: a.problems || [],
+    desired_outcomes: a.desired_outcomes || [],
+    objections: a.objections || [],
+    alternatives: a.alternatives || [],
+    description: a.description || "",
+  };
+  return stableStringify(core);
+}
+
 // Compute a payload fingerprint for submission idempotency.
 // Same request_id + same fingerprint = retry → return same result.
 // Same request_id + different fingerprint = conflict.

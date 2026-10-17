@@ -163,7 +163,7 @@ function PersonaCard({ data, meta }, ref) {
               <div>
                 <SectionLabel>Messaging guidance</SectionLabel>
                 {meta.messagingAiSuggested && (
-                  <div className="mt-1 uppercase tracking-wide text-amber-600" style={{ fontSize: "10px" }}>Suggested by Roo — reviewed</div>
+                  <div className="mt-1 uppercase tracking-wide text-amber-600" style={{ fontSize: "10px" }}>Suggested by Roo</div>
                 )}
                 <div className="mt-1.5 space-y-1.5">
                   {messagingGuidance.map((g, i) => (

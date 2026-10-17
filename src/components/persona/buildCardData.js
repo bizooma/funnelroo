@@ -16,7 +16,12 @@ export function buildCardData(audience, profile) {
   const initials = (audience?.name || "A")
     .split(" ").map((w) => w[0] || "").join("").slice(0, 2).toUpperCase();
 
-  const reviewLabel = audience?.status === "ready" ? "Reviewed" : "Draft";
+  // Review status is the persona content's own review state, separate from
+  // the audience's Ready/Draft status and from content origin. "Reviewed"
+  // requires an explicit recorded review against the current revision.
+  const hasGeneratedContent = !!(p.bio_summary || (p.messaging_guidance && p.messaging_guidance.length) || p.quote_text || (p.motivations && p.motivations.length));
+  const reviewed = !!p.reviewed_revision && !p.stale;
+  const reviewLabel = !hasGeneratedContent ? "" : reviewed ? "Reviewed" : "Needs review";
 
   return {
     title: p.title || audience?.name || "Audience archetype",
@@ -42,6 +47,7 @@ export function buildCardData(audience, profile) {
       theme: p.theme,
       highlightsOnly: p.highlights_only,
       stale: p.stale,
+      reviewedRevision: p.reviewed_revision,
       messagingAiSuggested: p.messaging_ai_suggested,
       revision: p.source_revision || p.content_hash,
       updatedAt: p.updated_at ? new Date(p.updated_at).toLocaleDateString() : "—",

@@ -1,15 +1,5 @@
 import { createClientFromRequest } from "npm:@base44/sdk@0.8.52";
-import { requireMembership, firstRecord, asArray, ok, err, HttpError, stableStringify } from "../../shared/auth.ts";
-
-function audienceContentHash(a) {
-  const core = {
-    name: a.name || "", roles_industries: a.roles_industries || "",
-    problems: a.problems || [], desired_outcomes: a.desired_outcomes || [],
-    objections: a.objections || [], alternatives: a.alternatives || [],
-    description: a.description || "",
-  };
-  return stableStringify(core).slice(0, 40);
-}
+import { requireMembership, firstRecord, asArray, ok, err, HttpError, audienceContentHash } from "../../shared/auth.ts";
 
 // Roo: the contextual assistant. Drafts content from the approved brief only.
 // Never invents testimonials, results, qualifications, deadlines or scarcity.
@@ -71,7 +61,7 @@ export default async function (req) {
 - Approved facts: ${JSON.stringify(profile?.approved_facts || [])}
 - Language to use: ${JSON.stringify(profile?.language_to_use || [])}
 - Language to avoid: ${JSON.stringify(profile?.language_to_avoid || [])}
-APPROVED AUDIENCES: ${JSON.stringify(approvedAudiences.map((a) => ({ name: a.name, problems: a.problems, objections: a.objections, desired_outcomes: a.desired_outcomes, messaging_guidance: a.persona?.messaging_guidance || [] })))}
+APPROVED AUDIENCES: ${JSON.stringify(approvedAudiences.map((a) => ({ name: a.name, problems: a.problems, objections: a.objections, desired_outcomes: a.desired_outcomes, messaging_guidance: (a.persona && !a.persona.stale && a.persona.reviewed_revision) ? (a.persona.messaging_guidance || []) : [] })))}
 APPROVED OFFERS: ${JSON.stringify(approvedOffers.map((o) => ({ name: o.name, offer: o.offer, goal: o.goal, cta: o.cta })))}
 ${unapprovedCount > 0 ? `NOTE: ${unapprovedCount} unapproved audience/offer item(s) exist but are excluded from this context. Do not reference them; suggest the user review and approve them in Settings if relevant.` : ""}`;
 
