@@ -4,6 +4,7 @@ import { useWorkspace } from "@/lib/workspaceContext";
 import { base44 } from "@/api/base44Client";
 import AppShell from "@/components/AppShell";
 import { MascotBadge } from "@/components/MascotBadge";
+import { Image } from "@/components/ui/image";
 import { RooPanel } from "@/components/RooPanel";
 import ConversionReport from "@/components/dashboard/ConversionReport";
 import { Card, CardContent } from "@/components/ui/card";
@@ -162,7 +163,12 @@ function LaunchGuide({ dashState, funnels, brief }) {
         <Card className="border-indigo-200 bg-indigo-50/30">
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <MascotBadge size={40} />
+              <Image
+                src="https://media.base44.com/images/public/6acba9de240facdd95f5665d/ab6d36c18_point-right.png"
+                alt="Roo pointing to your next step"
+                className="h-12 w-12 shrink-0"
+                fittingType="fit"
+              />
               <div className="flex-1">
                 <div className="text-xs text-slate-500">Next step</div>
                 <div className="text-sm font-medium text-slate-800 mt-0.5">{nextAction.label}</div>
