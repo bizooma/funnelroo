@@ -204,7 +204,7 @@ export function nextDashboardAction(state) {
   let nextAction = null;
   let stage = "prepare";
 
-  // Priority: explicitly resumed setup > recent edits > next logical step
+  // Priority: explicitly resumed setup > preparation steps > continue drafts > build new
   if (activeSetupSessions.length > 0) {
     const session = activeSetupSessions[0];
     nextAction = {
@@ -212,14 +212,6 @@ export function nextDashboardAction(state) {
       destination: `/guided-setup?session=${session.id}`,
     };
     stage = session.step?.startsWith("build") || session.step === "launch" ? "build" : "prepare";
-  } else if (draftFunnels.length > 0) {
-    // Resume an existing draft
-    const draft = draftFunnels[0];
-    nextAction = {
-      label: `Continue setting up ${draft.name}`,
-      destination: `/funnels/${draft.id}`,
-    };
-    stage = "build";
   } else if (!hasBusinessBasics) {
     nextAction = {
       label: "Add my business basics",
@@ -253,6 +245,14 @@ export function nextDashboardAction(state) {
       };
     }
     stage = "prepare";
+  } else if (draftFunnels.length > 0) {
+    // Preparation done — resume an existing draft
+    const draft = draftFunnels[0];
+    nextAction = {
+      label: `Continue setting up ${draft.name}`,
+      destination: `/funnels/${draft.id}`,
+    };
+    stage = "build";
   } else {
     nextAction = {
       label: "Build my first funnel",

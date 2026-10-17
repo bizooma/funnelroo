@@ -31,7 +31,7 @@ const TEMPLATES = [
 ];
 
 export default function GuidedSetup() {
-  const { current, loading, canAdmin } = useWorkspace();
+  const { current, loading } = useWorkspace();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [sessionId, setSessionId] = useState(params.get("session"));
