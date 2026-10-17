@@ -166,7 +166,7 @@ function LaunchGuide({ dashState, funnels, brief }) {
               <Image
                 src="https://media.base44.com/images/public/6acba9de240facdd95f5665d/255ed3391_point-right1.png"
                 alt="Roo pointing to your next step"
-                className="h-12 w-12 shrink-0"
+                className="h-16 w-16 shrink-0"
                 fittingType="fit"
               />
               <div className="flex-1">
