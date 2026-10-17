@@ -223,12 +223,12 @@ export function nextDashboardAction(state) {
     if (draftAudiences.length > 0) {
       nextAction = {
         label: "Finish my audience",
-        destination: "/marketing-kit",
+        destination: "/marketing-kit?area=audiences",
       };
     } else {
       nextAction = {
         label: "Define my audience",
-        destination: "/marketing-kit",
+        destination: "/marketing-kit?area=audiences",
       };
     }
     stage = "prepare";
@@ -236,12 +236,12 @@ export function nextDashboardAction(state) {
     if (draftOffers.length > 0) {
       nextAction = {
         label: "Finish my offer",
-        destination: "/marketing-kit",
+        destination: "/marketing-kit?area=offers",
       };
     } else {
       nextAction = {
         label: "Create my offer",
-        destination: "/marketing-kit",
+        destination: "/marketing-kit?area=offers",
       };
     }
     stage = "prepare";

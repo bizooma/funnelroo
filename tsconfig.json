@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "checkJs": false,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "types": []
+  },
+  "include": ["base44/shared/**/*.ts"],
+  "exclude": ["node_modules", "base44/functions"]
+}
