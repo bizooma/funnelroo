@@ -23,6 +23,8 @@ import Contacts from '@/pages/Contacts';
 import ContactDetail from '@/pages/ContactDetail';
 import Resources from '@/pages/Resources';
 import Appointments from '@/pages/Appointments';
+import MarketingKit from '@/pages/MarketingKit';
+import GuidedSetup from '@/pages/GuidedSetup';
 import PublicFunnel from '@/pages/PublicFunnel';
 import ResourceAccess from '@/pages/ResourceAccess';
 import AcceptInvite from '@/pages/AcceptInvite';
@@ -59,6 +61,8 @@ function App() {
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/contacts" element={<Contacts />} />
                   <Route path="/contacts/:id" element={<ContactDetail />} />
+                  <Route path="/marketing-kit" element={<MarketingKit />} />
+                  <Route path="/guided-setup" element={<GuidedSetup />} />
                   <Route path="/resources" element={<Resources />} />
                   <Route path="/appointments" element={<Appointments />} />
                 </Route>

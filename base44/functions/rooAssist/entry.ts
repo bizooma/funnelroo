@@ -35,12 +35,21 @@ export default async function (req) {
       await sr.entities.Offer.filter({ workspace_id: body.workspace_id })
     );
 
-    // Only approved audiences and offers are used as Roo context. Unapproved
-    // items are counted but not included — Roo must not draft from hypotheses
-    // the user has not approved.
-    const approvedAudiences = audiences.filter((a) => a.approved);
-    const approvedOffers = offers.filter((o) => o.approved);
-    const unapprovedCount = (audiences.length - approvedAudiences.length) + (offers.length - approvedOffers.length);
+    // Only approved/ready audiences and offers are used as Roo context. When a
+    // specific audience_id or offer_id is provided (e.g. from a funnel's
+    // selected context), use ONLY that reviewed revision — not every approved
+    // asset in the workspace.
+    let contextAudiences = audiences.filter((a) => a.approved || a.status === "ready");
+    let contextOffers = offers.filter((o) => o.approved || o.status === "ready");
+    if (body.audience_id) {
+      contextAudiences = audiences.filter((a) => a.id === body.audience_id);
+    }
+    if (body.offer_id) {
+      contextOffers = offers.filter((o) => o.id === body.offer_id);
+    }
+    const approvedAudiences = contextAudiences;
+    const approvedOffers = contextOffers;
+    const unapprovedCount = (audiences.length - audiences.filter((a) => a.approved || a.status === "ready").length) + (offers.length - offers.filter((o) => o.approved || o.status === "ready").length);
 
     const briefText = `BUSINESS BRIEF:
 - Business name: ${profile?.business_name || "(not set)"}

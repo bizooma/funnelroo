@@ -8,6 +8,7 @@ import { FunnelResourceTab } from "@/components/funnel/FunnelResourceTab";
 import { NurtureTab } from "@/components/funnel/NurtureTab";
 import { BookingTab } from "@/components/funnel/BookingTab";
 import { FunnelSeoCard } from "@/components/funnel/FunnelSeoCard";
+import AssetSelector from "@/components/funnel/AssetSelector";
 import { ComingSoon } from "@/components/ComingSoon";
 import { RooPanel } from "@/components/RooPanel";
 import { Button } from "@/components/ui/button";
@@ -27,8 +28,8 @@ const TABS = [
   { id: "resource", label: "Resource" },
   { id: "booking", label: "Booking" },
   { id: "followup", label: "Nurture" },
-  { id: "traffic", label: "Traffic", soon: "Phase 3" },
-  { id: "results", label: "Results", soon: "Phase 3" },
+  { id: "traffic", label: "Traffic", soon: true },
+  { id: "results", label: "Results", soon: true },
 ];
 
 export default function FunnelWorkspace() {
@@ -242,24 +243,11 @@ export default function FunnelWorkspace() {
               <CardContent className="p-5">
                 <h3 className="font-semibold text-slate-800 mb-4">Audience & offer</h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-xs text-slate-500">Linked audience</Label>
-                    <select value={funnel.audience_id || ""} onChange={(e) => linkAudienceOffer("audience_id", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white">
-                      <option value="">— none —</option>
-                      {brief.audiences.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                    </select>
-                    <p className="text-xs text-slate-400 mt-1">Define audiences in Settings.</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-slate-500">Linked offer</Label>
-                    <select value={funnel.offer_id || ""} onChange={(e) => linkAudienceOffer("offer_id", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white">
-                      <option value="">— none —</option>
-                      {brief.offers.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                    </select>
-                  </div>
+                  <AssetSelector kind="audience" items={brief.audiences} value={funnel.audience_id} onChange={(id) => linkAudienceOffer("audience_id", id)} canAdmin={canPublish} />
+                  <AssetSelector kind="offer" items={brief.offers} value={funnel.offer_id} onChange={(id) => linkAudienceOffer("offer_id", id)} canAdmin={canPublish} />
                 </div>
                 <div className="mt-4 flex items-center gap-2">
-                  <RooPanel title="Draft page copy" action="draftPageCopy" extraPayload={{ funnel_type: funnel.type }} onApply={(d) => {
+                  <RooPanel title="Draft page copy" action="draftPageCopy" extraPayload={{ funnel_type: funnel.type, audience_id: funnel.audience_id, offer_id: funnel.offer_id }} onApply={(d) => {
                     if (d.hero) {
                       const next = blocks.map((b) => b.type === "hero" ? { ...b, props: { ...b.props, ...d.hero } } : b);
                       if (!next.some((b) => b.type === "hero")) next.unshift({ id: crypto.randomUUID(), type: "hero", props: d.hero });
@@ -274,7 +262,7 @@ export default function FunnelWorkspace() {
             <Card>
               <CardContent className="p-5">
                 <h3 className="font-semibold text-slate-800 mb-1">Publishing readiness</h3>
-                <p className="text-xs text-slate-500 mb-4">Checks are specific to this funnel's template. Email sender and nurture sequence connect in a later phase.</p>
+                <p className="text-xs text-slate-500 mb-4">Checks are specific to this funnel's template. Optional features only show as required when you enable them.</p>
                 <div className="space-y-2.5">
                   {readiness.map((r, i) => (
                     <div key={i} className="flex items-center gap-2.5 text-sm">
@@ -308,10 +296,10 @@ export default function FunnelWorkspace() {
           <NurtureTab funnel={funnel} draft={draft} onChanged={load} />
         )}
         {tab === "traffic" && (
-          <Card><CardContent><ComingSoon title="Campaigns & traffic" description="Ad copy, image briefs, UTM-tagged links and manual/CSV spend imports. No automatic ad buying in V1." phase="Follow-on Phase 3" /></CardContent></Card>
+          <Card><CardContent><ComingSoon title="Campaigns & traffic" description="Ad copy, image briefs, UTM-tagged links and manual/CSV spend imports." /></CardContent></Card>
         )}
         {tab === "results" && (
-          <Card><CardContent><ComingSoon title="Funnel results" description="Sessions, accepted forms, acquired leads, confirmed bookings, attendance and won outcomes — with template-specific metrics." phase="Follow-on Phase 3" /></CardContent></Card>
+          <Card><CardContent><ComingSoon title="Funnel results" description="Sessions, accepted forms, acquired leads, confirmed bookings, attendance and won outcomes." /></CardContent></Card>
         )}
 
         {/* Dirty tab switch dialog — prevents silently losing unsaved page edits */}

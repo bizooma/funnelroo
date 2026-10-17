@@ -125,6 +125,36 @@
           }
         }
       }
+    },
+    "context_snapshot": {
+      "type": "object",
+      "properties": {
+        "audience_id": {
+          "type": "string"
+        },
+        "audience_revision": {
+          "type": "string"
+        },
+        "offer_id": {
+          "type": "string"
+        },
+        "offer_revision": {
+          "type": "string"
+        },
+        "business_profile_id": {
+          "type": "string"
+        },
+        "resource_version_id": {
+          "type": "string"
+        },
+        "captured_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "setup_step": {
+      "type": "string"
     }
   },
   "required": [

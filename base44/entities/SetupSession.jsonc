@@ -1,0 +1,101 @@
+{
+  "name": "SetupSession",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "user_id": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "step": {
+      "type": "string",
+      "enum": [
+        "prepare_business",
+        "prepare_audience",
+        "prepare_offer",
+        "prepare_resource",
+        "build_review",
+        "build_create",
+        "launch",
+        "completed"
+      ],
+      "default": "prepare_business"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "guided",
+        "blank"
+      ],
+      "default": "guided"
+    },
+    "template": {
+      "type": "string",
+      "enum": [
+        "lead_magnet",
+        "direct_booking",
+        "service_inquiry"
+      ]
+    },
+    "funnel_name": {
+      "type": "string"
+    },
+    "audience_id": {
+      "type": "string"
+    },
+    "offer_id": {
+      "type": "string"
+    },
+    "resource_id": {
+      "type": "string"
+    },
+    "resource_concept": {
+      "type": "string"
+    },
+    "funnel_id": {
+      "type": "string"
+    },
+    "context_snapshot": {
+      "type": "object"
+    },
+    "completed": {
+      "type": "boolean",
+      "default": false
+    },
+    "abandoned": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "workspace_id",
+    "user_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

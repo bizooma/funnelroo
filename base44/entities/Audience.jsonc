@@ -46,6 +46,25 @@
     "ai_suggested": {
       "type": "boolean",
       "default": false
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "ready",
+        "archived"
+      ],
+      "default": "draft"
+    },
+    "reviewed_by": {
+      "type": "string"
+    },
+    "reviewed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_id": {
+      "type": "string"
     }
   },
   "required": [

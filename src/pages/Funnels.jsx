@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, FileText, CalendarCheck, MessageSquare, Loader2, Search } from "lucide-react";
+import { Plus, FileText, CalendarCheck, MessageSquare, Loader2, Search, Sparkles } from "lucide-react";
 
 const TEMPLATES = [
   { type: "lead_magnet", label: "Lead magnet to booking", desc: "Landing form, resource delivery, thank-you page, optional video and scheduler, eligible follow-up.", icon: FileText },
@@ -59,6 +59,11 @@ export default function Funnels() {
     }
   }
 
+  function startGuided() {
+    setOpen(false);
+    navigate("/guided-setup");
+  }
+
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin" /></div>;
   if (!current) return null;
 
@@ -72,7 +77,10 @@ export default function Funnels() {
             <h1 className="text-2xl font-bold text-slate-900">Funnels</h1>
             <p className="text-sm text-slate-500 mt-1">Create, edit and publish your conversion journeys.</p>
           </div>
-          <Button onClick={() => setOpen(true)}><Plus className="w-4 h-4 mr-1.5" /> New funnel</Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => navigate("/guided-setup")}><Sparkles className="w-4 h-4 mr-1.5" /> Build with Roo</Button>
+            <Button onClick={() => setOpen(true)}><Plus className="w-4 h-4 mr-1.5" /> Blank funnel</Button>
+          </div>
         </div>
 
         <div className="relative mb-5 max-w-xs">

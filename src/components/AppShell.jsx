@@ -11,6 +11,7 @@ import { useState } from "react";
 const nav = [
   { to: "/app", label: "Overview", icon: LayoutDashboard },
   { to: "/funnels", label: "Funnels", icon: FolderKanban },
+  { to: "/marketing-kit", label: "Marketing kit", icon: Sparkles },
   { to: "/resources", label: "Resources", icon: Package },
   { to: "/contacts", label: "Contacts", icon: Users },
   { to: "/appointments", label: "Appointments", icon: CalendarCheck },

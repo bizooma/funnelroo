@@ -18,7 +18,6 @@ import CalendlyTab from "@/components/settings/CalendlyTab";
 import CalendlyCallback from "@/components/settings/CalendlyCallback";
 
 const TABS = [
-  { id: "brief", label: "Business brief", icon: FileText },
   { id: "team", label: "Team", icon: Users },
   { id: "integrations", label: "Integrations", icon: Plug },
   { id: "billing", label: "Billing", icon: CreditCard, soon: true },
@@ -27,7 +26,12 @@ const TABS = [
 
 export default function Settings() {
   const { current, loading, canAdmin } = useWorkspace();
-  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get("tab") === "integrations" ? "integrations" : "brief");
+  const [tab, setTab] = useState(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "brief") return "team"; // brief moved to Marketing kit
+    if (t === "integrations") return "integrations";
+    return "team";
+  });
 
   if (loading) return <AppShell><div className="p-8"><div className="w-8 h-8 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin" /></div></AppShell>;
   if (!current) return null;
@@ -36,7 +40,7 @@ export default function Settings() {
     <AppShell>
       <div className="p-8 max-w-4xl">
         <h1 className="text-2xl font-bold text-slate-900 mb-1">Settings</h1>
-        <p className="text-sm text-slate-500 mb-6">Manage your business brief, team and workspace.</p>
+        <p className="text-sm text-slate-500 mb-6">Manage your team, integrations, and workspace.</p>
 
         <div className="flex items-center gap-1 border-b border-slate-200 mb-6">
           {TABS.map((t) => (
@@ -49,7 +53,6 @@ export default function Settings() {
         </div>
 
         <CalendlyCallback />
-        {tab === "brief" && <BriefTab />}
         {tab === "team" && <TeamTab canAdmin={canAdmin} />}
         {tab === "integrations" && <CalendlyTab />}
         {tab === "billing" && <Card><CardContent><ComingSoon title="Billing" description="Stripe subscriptions — one per workspace — with owner-only controls and server-side entitlements." phase="Follow-on Phase 4" /></CardContent></Card>}
