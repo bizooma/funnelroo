@@ -176,13 +176,17 @@ export default function FunnelWorkspace() {
     has_booking: blocks.some((b) => b.type === "booking" && b.props?.calendly_url),
     has_sender: draft?.delivery_mode === "immediate_plus_email" && !!draft?.sender_id,
   };
-  const readiness = [
-    { label: "Landing page sections", ok: blocks.length >= 2 },
-    { label: "Lead form", ok: checks.has_form, needed: funnel.type !== "direct_booking" },
-    { label: "Approved resource version", ok: checks.has_resource, needed: funnel.type === "lead_magnet" },
-    { label: "Email sender", ok: checks.has_sender, needed: funnel.type === "lead_magnet" && draft?.delivery_mode === "immediate_plus_email" },
-    { label: "Booking connection", ok: checks.has_booking, needed: funnel.type === "direct_booking" || funnel.type === "lead_magnet" },
+  const readinessRequired = [
+    { label: "Landing page sections", ok: blocks.length >= 2, tab: "pages" },
+    { label: "Request form", ok: checks.has_form, tab: "pages", needed: funnel.type !== "direct_booking" },
+    { label: "Approved resource version", ok: checks.has_resource, tab: "resource", needed: funnel.type === "lead_magnet" },
+    { label: "Email sender", ok: checks.has_sender, tab: "resource", needed: funnel.type === "lead_magnet" && draft?.delivery_mode === "immediate_plus_email" },
+    { label: "Booking destination", ok: checks.has_booking, tab: "booking", needed: funnel.type === "direct_booking" },
   ].filter((r) => r.needed !== false);
+  const readinessOptional = [
+    { label: "Booking invitation", ok: checks.has_booking, tab: "booking", applies: funnel.type !== "direct_booking" },
+    { label: "Follow-up sequence", ok: !!draft?.sequence_ref, tab: "followup", applies: true },
+  ].filter((r) => r.applies);
 
   return (
     <AppShell>
@@ -254,7 +258,7 @@ export default function FunnelWorkspace() {
                       saveBlocks(next);
                     }
                   }} />
-                  <RooPanel title="What's next?" action="suggestNextStep" context={{ type: funnel.type, state: funnel.state, readiness }} />
+                  <RooPanel title="What's next?" action="suggestNextStep" context={{ type: funnel.type, state: funnel.state, readiness: readinessRequired }} />
                 </div>
               </CardContent>
             </Card>
@@ -262,19 +266,30 @@ export default function FunnelWorkspace() {
             <Card>
               <CardContent className="p-5">
                 <h3 className="font-semibold text-slate-800 mb-1">Publishing readiness</h3>
-                <p className="text-xs text-slate-500 mb-4">Checks are specific to this funnel's template. Optional features only show as required when you enable them.</p>
+                <p className="text-xs text-slate-500 mb-4">Required items must be complete before launch. Optional features only show as required when you enable them.</p>
                 <div className="space-y-2.5">
-                  {readiness.map((r, i) => (
-                    <div key={i} className="flex items-center gap-2.5 text-sm">
+                  {readinessRequired.map((r, i) => (
+                    <button key={i} onClick={() => !r.ok && setTab(r.tab)} className={`flex items-center gap-2.5 text-sm w-full text-left ${!r.ok ? "hover:bg-slate-50 rounded-lg -mx-1 px-1 py-0.5" : ""}`}>
                       {r.ok ? <Check className="w-4 h-4 text-emerald-500" /> : <X className="w-4 h-4 text-slate-300" />}
                       <span className={r.ok ? "text-slate-700" : "text-slate-400"}>{r.label}</span>
-                    </div>
+                      {!r.ok && <span className="text-xs text-indigo-500 ml-auto">Fix →</span>}
+                    </button>
                   ))}
-                  <div className="flex items-center gap-2.5 text-sm">
-                    {draft?.sequence_ref ? <Check className="w-4 h-4 text-emerald-500" /> : <X className="w-4 h-4 text-slate-300" />}
-                    <span className={draft?.sequence_ref ? "text-slate-700" : "text-slate-400"}>Nurture sequence</span>
-                  </div>
                 </div>
+                {readinessOptional.length > 0 && (
+                  <>
+                    <div className="text-xs font-medium text-slate-400 mt-4 mb-2">Optional</div>
+                    <div className="space-y-2.5">
+                      {readinessOptional.map((r, i) => (
+                        <button key={i} onClick={() => setTab(r.tab)} className="flex items-center gap-2.5 text-sm w-full text-left hover:bg-slate-50 rounded-lg -mx-1 px-1 py-0.5">
+                          {r.ok ? <Check className="w-4 h-4 text-emerald-500" /> : <div className="w-4 h-4 rounded-full border-2 border-slate-200" />}
+                          <span className={r.ok ? "text-slate-700" : "text-slate-400"}>{r.label}</span>
+                          {!r.ok && <span className="text-xs text-slate-400 ml-auto">Optional</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 

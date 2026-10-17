@@ -22,7 +22,6 @@ const STEPS = [
   { id: "prepare_resource", label: "Resource", group: "Prepare" },
   { id: "build_review", label: "Review", group: "Build" },
   { id: "build_create", label: "Create", group: "Build" },
-  { id: "launch", label: "Launch", group: "Launch" },
 ];
 
 const TEMPLATES = [
@@ -65,6 +64,10 @@ export default function GuidedSetup() {
           const sRes = await base44.functions.invoke("marketingKitAccess", { action: "getSetupSession", workspace_id: current.id });
           const s = sRes.data?.session;
           if (s) {
+            if (s.funnel_id) {
+              navigate(`/funnels/${s.funnel_id}`);
+              return;
+            }
             setSessionId(s.id);
             setStep(s.step || "prepare_business");
             setMode(s.mode || "guided");
@@ -184,7 +187,7 @@ export default function GuidedSetup() {
                 </div>
               </div>
             </button>
-            <button onClick={() => { setMode("blank"); setStep("build_review"); }} className="w-full text-left p-5 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors">
+            <button onClick={async () => { setMode("blank"); setStep("build_review"); await persistStep("build_review", { mode: "blank" }); }} className="w-full text-left p-5 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors">
               <div className="flex items-center gap-3">
                 <FileText className="w-5 h-5 text-slate-400" />
                 <div>
@@ -201,7 +204,7 @@ export default function GuidedSetup() {
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const stepIdx = STEPS.findIndex((s) => s.id === step);
-  const isLast = step === "launch";
+  const isLast = step === "build_create";
 
   return (
     <AppShell>
@@ -318,22 +321,19 @@ export default function GuidedSetup() {
             {/* PREPARE: Resource */}
             {step === "prepare_resource" && (
               <div className="space-y-4">
-                <StepHeader title="Your resource" desc="Choose an existing resource, upload one, or draft a concept now. You can attach the finished file later." />
-                <div className="space-y-2">
-                  <Button variant="outline" className="w-full justify-start" onClick={() => navigate("/resources")}>
-                    <Package className="w-4 h-4 mr-2" /> Choose existing resource
+                <StepHeader title="Your resource" desc="Attach an existing resource, upload one, or draft a concept now. You can attach the finished file later from the funnel editor." />
+                <a href="/resources" target="_blank" rel="noopener noreferrer" className="block">
+                  <Button variant="outline" className="w-full justify-start">
+                    <Package className="w-4 h-4 mr-2" /> Browse or upload resources (opens new tab)
                   </Button>
-                  <Button variant="outline" className="w-full justify-start" onClick={() => navigate("/resources")}>
-                    <Package className="w-4 h-4 mr-2" /> Upload a resource
-                  </Button>
-                </div>
+                </a>
                 <Field label="Resource concept (optional)">
-                  <Textarea value={form.resource_concept} onChange={(e) => set("resource_concept", e.target.value)} rows={3} placeholder="What resource would be useful for this audience? Roo can help draft an outline." />
+                  <Textarea value={form.resource_concept} onChange={(e) => set("resource_concept", e.target.value)} rows={3} placeholder="What resource would be useful for this audience? Roo can help draft an outline later." />
                 </Field>
                 <div className="rounded-lg bg-amber-50 border border-amber-100 p-3 text-xs text-amber-700">
                   A concept or outline helps with page drafting, but you'll need to attach a real file before launching a resource funnel.
                 </div>
-                <RooPanel title="Suggest resource ideas" action="draftAudience" onApply={() => {}} />
+                <p className="text-xs text-slate-500">You can skip this step and attach the resource later from the funnel editor.</p>
               </div>
             )}
 
@@ -361,18 +361,6 @@ export default function GuidedSetup() {
                   {creating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
                   {creating ? "Creating…" : "Create editable funnel draft"}
                 </Button>
-                <p className="text-xs text-slate-400">You can also create manually if Roo is unavailable.</p>
-              </div>
-            )}
-
-            {/* LAUNCH */}
-            {step === "launch" && (
-              <div className="space-y-4 text-center py-6">
-                <Check className="w-10 h-10 text-emerald-500 mx-auto" />
-                <StepHeader title="Your draft is ready" desc="Open it to review pages, finish resource delivery, add booking, and test the visitor journey." />
-                <Button size="lg" onClick={() => createFunnel()}>
-                  Open funnel draft <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
               </div>
             )}
           </CardContent>
@@ -383,7 +371,7 @@ export default function GuidedSetup() {
           <Button variant="ghost" disabled={stepIdx === 0 || saving || creating} onClick={back}>
             <ArrowLeft className="w-4 h-4 mr-1.5" /> Back
           </Button>
-          {!isLast && step !== "build_create" && (
+          {!isLast && (
             <Button disabled={saving} onClick={next}>
               {saving ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : null}
               Continue <ArrowRight className="w-4 h-4 ml-1.5" />

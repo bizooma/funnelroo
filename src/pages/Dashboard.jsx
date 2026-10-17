@@ -124,6 +124,7 @@ export default function Dashboard() {
 }
 
 function LaunchGuide({ dashState, funnels, brief }) {
+  const navigate = useNavigate();
   const { nextAction, heading, subheading } = dashState;
   const profile = brief?.profile || {};
   const hasBusiness = !!(profile.business_name || profile.primary_service);
@@ -166,7 +167,7 @@ function LaunchGuide({ dashState, funnels, brief }) {
                 <div className="text-xs text-slate-500">Next step</div>
                 <div className="text-sm font-medium text-slate-800 mt-0.5">{nextAction.label}</div>
               </div>
-              <Button onClick={() => window.location.href = nextAction.destination}>
+              <Button onClick={() => navigate(nextAction.destination)}>
                 <ArrowRight className="w-4 h-4 mr-1.5" /> Go
               </Button>
             </div>
