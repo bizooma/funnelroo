@@ -6,6 +6,7 @@ import BusinessBrandManager from "@/components/marketing-kit/BusinessBrandManage
 import AudienceManager from "@/components/marketing-kit/AudienceManager";
 import OfferManager from "@/components/marketing-kit/OfferManager";
 import { Card, CardContent } from "@/components/ui/card";
+import { Image } from "@/components/ui/image";
 import { Package, Users, Tag, Briefcase, ArrowRight } from "lucide-react";
 
 const AREAS = [
@@ -25,7 +26,15 @@ export default function MarketingKit() {
   return (
     <AppShell>
       <div className="p-8 max-w-5xl">
-        <h1 className="text-2xl font-bold text-slate-900 mb-1">Marketing kit</h1>
+        <div className="flex items-center gap-3 mb-1">
+          <Image
+            src="https://media.base44.com/images/public/6acba9de240facdd95f5665d/5be2506ae_waiting.png"
+            alt="Roo, the FunnelRoo mascot"
+            fittingType="fit"
+            className="w-12 h-12 object-contain shrink-0"
+          />
+          <h1 className="text-2xl font-bold text-slate-900">Marketing kit</h1>
+        </div>
         <p className="text-sm text-slate-500 mb-6">Prepare your reusable marketing assets. Roo uses them to tailor every funnel.</p>
 
         {/* Area cards */}
