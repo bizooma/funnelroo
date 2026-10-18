@@ -9,10 +9,21 @@ import PersonaCard from "@/components/persona/PersonaCard";
 import PersonaCustomize from "@/components/persona/PersonaCustomize";
 import PersonaRefine from "@/components/persona/PersonaRefine";
 import PersonaPortraitGenerator from "@/components/persona/PersonaPortraitGenerator";
+import PersonaExportRoot from "@/components/persona/PersonaExportRoot";
+import { usePersonaExport } from "@/hooks/usePersonaExport";
 import { AudienceEditor } from "@/components/marketing-kit/AudienceManager";
 import { buildCardData } from "@/components/persona/buildCardData";
+import { createPortal } from "react-dom";
 import {
-  ArrowLeft, Pencil, SlidersHorizontal, Sparkles, Copy, Download, Printer, Rocket, Loader2, AlertTriangle, Image as ImageIcon,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  ArrowLeft, Pencil, SlidersHorizontal, Sparkles, Copy, Download, Printer, Rocket, Loader2, AlertTriangle, Image as ImageIcon, FileDown,
 } from "lucide-react";
 
 export default function AudienceDetail() {
@@ -30,6 +41,9 @@ export default function AudienceDetail() {
   const [dirty, setDirty] = useState(false);
   const [audienceRevision, setAudienceRevision] = useState(null);
   const cardRef = useRef(null);
+  const exportRootRef = useRef(null);
+  const { exportingPdf, overflow: pdfOverflow, exportPdf, print: printCard, setOverflow: setPdfOverflow } = usePersonaExport(exportRootRef);
+  const [unsavedChoice, setUnsavedChoice] = useState(false);
 
   async function load() {
     if (!current || !id) return;
@@ -160,10 +174,27 @@ export default function AudienceDetail() {
     }
   }
 
-  function printCard() {
-    document.body.classList.add("printing-persona");
-    window.print();
-    setTimeout(() => document.body.classList.remove("printing-persona"), 500);
+  async function runExportPdf() {
+    try {
+      const res = await exportPdf(audience.name);
+      if (!res?.overflow) toast({ title: "PDF downloaded" });
+    } catch (e) {
+      toast({ title: "PDF failed", description: e.response?.data?.error || e.message, variant: "destructive" });
+    }
+  }
+
+  async function runSaveAndExport() {
+    try {
+      await savePersona(audience.persona);
+      runExportPdf();
+    } catch {
+      /* savePersona already reported the error */
+    }
+  }
+
+  function handleDownloadPdf() {
+    if (dirty) setUnsavedChoice(true);
+    else runExportPdf();
   }
 
   const archived = audience.status === "archived";
@@ -200,10 +231,13 @@ export default function AudienceDetail() {
           )}
           <div className="flex-1" />
           <Button variant="ghost" size="sm" onClick={copySummary}><Copy className="w-4 h-4 mr-1.5" /> Copy summary</Button>
-          <Button variant="ghost" size="sm" onClick={downloadPng} disabled={exporting}>
+          <Button variant="ghost" size="sm" onClick={downloadPng} disabled={exporting || exportingPdf}>
             {exporting ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Download className="w-4 h-4 mr-1.5" />} Download PNG
           </Button>
-          <Button variant="ghost" size="sm" onClick={printCard}><Printer className="w-4 h-4 mr-1.5" /> Print / Save as PDF</Button>
+          <Button variant="ghost" size="sm" onClick={handleDownloadPdf} disabled={exporting || exportingPdf}>
+            {exportingPdf ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <FileDown className="w-4 h-4 mr-1.5" />} Download PDF
+          </Button>
+          <Button variant="ghost" size="sm" onClick={printCard} disabled={exporting || exportingPdf}><Printer className="w-4 h-4 mr-1.5" /> Print / Save as PDF</Button>
         </div>
 
         {persona.stale && (
@@ -272,6 +306,46 @@ export default function AudienceDetail() {
           onApplied={handlePortraitApplied}
         />
       )}
+
+      {audience && createPortal(
+        <div className="persona-print-portal" ref={exportRootRef}>
+          <PersonaExportRoot data={cardData} meta={cardData.meta} />
+        </div>,
+        document.body
+      )}
+
+      <Dialog open={unsavedChoice} onOpenChange={setUnsavedChoice}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Unsaved card edits</DialogTitle>
+            <DialogDescription>
+              You have unsaved persona card edits. Save first to export the saved card, or export the current unsaved
+              preview as shown.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUnsavedChoice(false)}>Cancel</Button>
+            <Button variant="outline" onClick={runSaveAndExport}>Save &amp; export</Button>
+            <Button onClick={() => { setUnsavedChoice(false); runExportPdf(); }}>Export unsaved preview</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={pdfOverflow} onOpenChange={setPdfOverflow}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>More detail than fits one page</DialogTitle>
+            <DialogDescription>
+              This persona has more detail than fits on a readable single page. Choose fewer highlights, or use the
+              expanded print layout.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPdfOverflow(false)}>Close</Button>
+            <Button onClick={() => { setPdfOverflow(false); printCard(); }}>Use Print / Save as PDF</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

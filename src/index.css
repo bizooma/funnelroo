@@ -95,40 +95,36 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Persona card print / Save as PDF: hide app chrome, show only the card. */
-@media print {
-  @page {
-    size: landscape;
-    margin: 0.5in;
-  }
-  body.printing-persona * {
-    visibility: hidden;
-  }
-  body.printing-persona .persona-print-root,
-  body.printing-persona .persona-print-root * {
-    visibility: visible;
-  }
-  body.printing-persona .persona-print-root {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    box-shadow: none !important;
-    border: none !important;
-  }
-  body.printing-persona .persona-card {
-    max-width: 100% !important;
-  }
+/* Persona export root: off-screen on screen, revealed only in print. */
+.persona-print-portal {
+  position: fixed;
+  left: -99999px;
+  top: 0;
+  width: 1100px;
+  pointer-events: none;
+  z-index: -1;
 }
 
-/* Persona card responsive columns: 3 → 2 → 1 */
+/* Export layout: force the reference 3-column (or 2-column) grid regardless of
+   browser viewport, so PDF capture and print never stack columns. */
+.persona-export .persona-grid-3 {
+  grid-template-columns: minmax(0, 38fr) minmax(0, 34fr) minmax(0, 28fr);
+}
+.persona-export .persona-grid-2 {
+  grid-template-columns: minmax(0, 38fr) minmax(0, 34fr);
+}
+.persona-export .persona-col-right {
+  grid-column: auto;
+}
+
+/* Persona card responsive columns: 3 → 2 → 1 (screen only; print/export keep 3) */
 .persona-grid-3 {
   grid-template-columns: 38fr 34fr 28fr;
 }
 .persona-grid-2 {
   grid-template-columns: 38fr 34fr;
 }
-@media (max-width: 900px) {
+@media screen and (max-width: 900px) {
   .persona-grid-3, .persona-grid-2 {
     grid-template-columns: 1fr 1fr;
   }
@@ -136,12 +132,58 @@ html {
     grid-column: 1 / -1;
   }
 }
-@media (max-width: 640px) {
+@media screen and (max-width: 640px) {
   .persona-grid-3, .persona-grid-2 {
     grid-template-columns: 1fr;
   }
   .persona-col-right {
     grid-column: auto;
+  }
+}
+
+/* Persona print: an isolated named page, colors preserved, app chrome removed. */
+@page persona {
+  size: letter landscape;
+  margin: 0.25in;
+}
+
+@media print {
+  body > * {
+    display: none !important;
+  }
+  .persona-print-portal {
+    display: block !important;
+    position: static !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    pointer-events: auto;
+    z-index: auto;
+    page: persona;
+  }
+  .persona-print-portal,
+  .persona-print-portal * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .persona-export .persona-grid-3 {
+    grid-template-columns: minmax(0, 38fr) minmax(0, 34fr) minmax(0, 28fr) !important;
+  }
+  .persona-export .persona-grid-2 {
+    grid-template-columns: minmax(0, 38fr) minmax(0, 34fr) !important;
+  }
+  .persona-export .persona-col-right {
+    grid-column: auto !important;
+  }
+  .persona-card {
+    box-shadow: none !important;
+    max-width: 100% !important;
+  }
+  .persona-print-portal .persona-card,
+  .persona-print-portal .persona-col-left,
+  .persona-print-portal .persona-col-center,
+  .persona-print-portal .persona-col-right {
+    break-inside: avoid;
   }
 }
 

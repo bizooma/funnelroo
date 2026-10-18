@@ -26,6 +26,7 @@ import Appointments from '@/pages/Appointments';
 import MarketingKit from '@/pages/MarketingKit';
 import AudienceDetail from '@/pages/AudienceDetail';
 import GuidedSetup from '@/pages/GuidedSetup';
+import PersonaExportPreview from '@/pages/PersonaExportPreview';
 import PublicFunnel from '@/pages/PublicFunnel';
 import ResourceAccess from '@/pages/ResourceAccess';
 import AcceptInvite from '@/pages/AcceptInvite';
@@ -53,6 +54,7 @@ function App() {
 
             {/* Protected routes — require authentication */}
             <Route element={<ProtectedRoute unauthenticatedElement={<LoginRedirect />} />}>
+              <Route path="/dev/persona-export" element={<PersonaExportPreview />} />
               <Route element={<WorkspaceProvider><Outlet /></WorkspaceProvider>}>
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route element={<WorkspaceGuard />}>
