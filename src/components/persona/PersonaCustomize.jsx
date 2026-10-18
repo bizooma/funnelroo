@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { useWorkspace } from "@/lib/workspaceContext";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -15,7 +14,6 @@ import PersonaPortraitGenerator from "./PersonaPortraitGenerator";
 // Core facts remain bound to the Audience editor — this edits only the
 // `persona` presentation object.
 export default function PersonaCustomize({ open, persona, onClose, onSave, audienceId }) {
-  const { current } = useWorkspace();
   const [form, setForm] = useState(persona || {});
   const [saving, setSaving] = useState(false);
   const [portraitGen, setPortraitGen] = useState(false);

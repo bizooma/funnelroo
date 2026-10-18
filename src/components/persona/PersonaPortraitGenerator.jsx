@@ -39,7 +39,7 @@ export default function PersonaPortraitGenerator({ open, audienceId, audienceRev
       });
       setRequest(res.data?.request || null);
       const vp = res.data?.request?.visual_preferences;
-      if (vp) setPrefs((p) => ({ style: "photo", background: "workplace", appearance: "", ...vp }));
+      if (vp) setPrefs(() => ({ style: "photo", background: "workplace", appearance: "", ...vp }));
     } catch {
       /* ignore — recoverable on next poll */
     }
@@ -51,7 +51,6 @@ export default function PersonaPortraitGenerator({ open, audienceId, audienceRev
     setRequest(null);
     fetchStatus().finally(() => setLoading(false));
     return () => { if (pollRef.current) clearTimeout(pollRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, audienceId, current?.id]);
 
   // Poll while a request is pending (reconnect / in-flight recovery).
@@ -63,7 +62,6 @@ export default function PersonaPortraitGenerator({ open, audienceId, audienceRev
     };
     pollRef.current = setTimeout(tick, POLL_MS);
     return () => { if (pollRef.current) clearTimeout(pollRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, request?.state, request?.id]);
 
   async function generate() {

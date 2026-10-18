@@ -9,7 +9,7 @@ const ALLOWED_HOSTS = ["media.base44.com", "static.wixstatic.com"];
 
 // Visual preferences are creative choices, separate from factual audience
 // attributes. They are stored on the request record, not on the audience.
-export function sanitizePreferences(input) {
+export function sanitizePreferences(input: any) {
   const p = input || {};
   const style = p.style === "illustration" ? "illustration" : "photo";
   const background = ["workplace", "studio", "neutral"].includes(p.background)
@@ -26,7 +26,7 @@ export function sanitizePreferences(input) {
   return { style, background, appearance };
 }
 
-function clean(s, max = 160) {
+function clean(s: any, max: any = 160) {
   return String(s || "")
     .replace(/[<>]/g, "")
     .replace(/\s+/g, " ")
@@ -37,7 +37,7 @@ function clean(s, max = 160) {
 // Only "who they are" facts are used for the portrait. Problems, objections,
 // desired outcomes and quotations are deliberately excluded so the provider
 // never receives sensitive strategy text or customer quotes.
-export function sanitizeRoleContext(audience) {
+export function sanitizeRoleContext(audience: any) {
   const persona = audience?.persona || {};
   const parts = [];
   const role = clean(persona.role || audience?.roles_industries || "");
@@ -53,7 +53,7 @@ export function sanitizeRoleContext(audience) {
   return parts.join("; ") || "a professional buyer persona";
 }
 
-function inferSetting(rolesIndustries) {
+function inferSetting(rolesIndustries: any) {
   const r = (rolesIndustries || "").toLowerCase();
   if (/agency|creative|design|marketing|studio/.test(r)) return "an ordinary creative workspace";
   if (/consult|advisor|coach|consultant/.test(r)) return "a meeting space";
@@ -64,18 +64,18 @@ function inferSetting(rolesIndustries) {
   return "an appropriate work environment";
 }
 
-function clothingFor(rolesIndustries) {
+function clothingFor(rolesIndustries: any) {
   const r = (rolesIndustries || "").toLowerCase();
   if (/law|legal|finance|bank|attorney|account/.test(r)) return "smart-casual professional attire";
   return "appropriate, comfortable work attire — not necessarily a formal suit";
 }
 
-const STYLE_TERMS = {
+const STYLE_TERMS: Record<string, string> = {
   photo: "a natural, professional editorial photograph",
   illustration: "a clean, modern editorial illustration",
 };
 
-const BACKGROUND_TERMS = {
+const BACKGROUND_TERMS: Record<string, string> = {
   studio: "a simple, neutral studio background",
   neutral: "a plain, neutral background",
 };
@@ -84,7 +84,7 @@ const BACKGROUND_TERMS = {
 // audience record is never interpolated. Defaults to a realistic editorial
 // photo of one fictional adult, with appearance left unspecified unless the
 // user supplied explicit visual preferences.
-export function buildPortraitPrompt(audience, preferences) {
+export function buildPortraitPrompt(audience: any, preferences: any) {
   const p = sanitizePreferences(preferences);
   const roleContext = sanitizeRoleContext(audience);
   const setting =
@@ -109,7 +109,7 @@ export function buildPortraitPrompt(audience, preferences) {
 
 // Only accept image URLs from platform-managed storage origins. No unrestricted
 // URL-fetch proxy is exposed; the provider's own prompt is never returned.
-export function isValidGeneratedUrl(url) {
+export function isValidGeneratedUrl(url: any) {
   if (!url || typeof url !== "string") return false;
   try {
     const u = new URL(url);
@@ -121,7 +121,7 @@ export function isValidGeneratedUrl(url) {
 }
 
 // Public projection of a request record: the prompt is kept private.
-export function publicRequestView(r) {
+export function publicRequestView(r: any) {
   return {
     id: r.id,
     request_id: r.request_id,
