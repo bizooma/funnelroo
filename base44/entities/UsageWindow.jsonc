@@ -1,0 +1,62 @@
+{
+  "name": "UsageWindow",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "metric": {
+      "type": "string"
+    },
+    "window_start": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "window_end": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "catalog_version": {
+      "type": "string"
+    },
+    "allowance": {
+      "type": "number"
+    },
+    "used": {
+      "type": "number",
+      "default": 0
+    },
+    "reserved": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "workspace_id",
+    "metric",
+    "window_start",
+    "window_end"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    }
+  }
+}

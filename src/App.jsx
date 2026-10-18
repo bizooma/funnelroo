@@ -32,6 +32,7 @@ import ResourceAccess from '@/pages/ResourceAccess';
 import AcceptInvite from '@/pages/AcceptInvite';
 import Unsubscribe from '@/pages/Unsubscribe';
 import Marketing from '@/pages/Marketing';
+import Pricing from '@/pages/Pricing';
 import { LoginRedirect } from '@/components/ProtectedRoute';
 
 function App() {
@@ -43,6 +44,7 @@ function App() {
           <Routes>
             {/* Public routes — no auth required */}
             <Route path="/" element={<Marketing />} />
+            <Route path="/pricing" element={<Pricing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />

@@ -1,0 +1,86 @@
+{
+  "name": "BillingOperation",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "operation_type": {
+      "type": "string",
+      "enum": [
+        "checkout",
+        "change",
+        "cancel",
+        "portal"
+      ]
+    },
+    "intent_key": {
+      "type": "string"
+    },
+    "stripe_checkout_session_id": {
+      "type": "string"
+    },
+    "plan": {
+      "type": "string",
+      "enum": [
+        "starter",
+        "growth"
+      ]
+    },
+    "interval": {
+      "type": "string",
+      "enum": [
+        "month",
+        "year"
+      ]
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "processing",
+        "completed",
+        "failed",
+        "expired"
+      ],
+      "default": "pending"
+    },
+    "created_by": {
+      "type": "string"
+    },
+    "error": {
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "operation_type",
+    "intent_key"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    }
+  }
+}

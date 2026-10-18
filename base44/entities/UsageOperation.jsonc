@@ -1,0 +1,73 @@
+{
+  "name": "UsageOperation",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "operation_key": {
+      "type": "string"
+    },
+    "metric": {
+      "type": "string",
+      "enum": [
+        "email_send",
+        "ai_text",
+        "image",
+        "contact_capture",
+        "live_funnel",
+        "team_seat"
+      ]
+    },
+    "units": {
+      "type": "number",
+      "default": 1
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "reserved",
+        "consumed",
+        "released",
+        "failed"
+      ],
+      "default": "reserved"
+    },
+    "window_id": {
+      "type": "string"
+    },
+    "source_ref": {
+      "type": "string"
+    },
+    "error": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "operation_key",
+    "metric"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    }
+  }
+}

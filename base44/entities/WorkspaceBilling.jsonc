@@ -1,0 +1,160 @@
+{
+  "name": "WorkspaceBilling",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "environment": {
+      "type": "string",
+      "enum": [
+        "test",
+        "live"
+      ],
+      "default": "test"
+    },
+    "stripe_customer_id": {
+      "type": "string"
+    },
+    "stripe_subscription_id": {
+      "type": "string"
+    },
+    "stripe_subscription_item_id": {
+      "type": "string"
+    },
+    "plan": {
+      "type": "string",
+      "enum": [
+        "starter",
+        "growth"
+      ]
+    },
+    "catalog_version": {
+      "type": "string"
+    },
+    "interval": {
+      "type": "string",
+      "enum": [
+        "month",
+        "year"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "trial",
+        "paid",
+        "payment_grace",
+        "read_only",
+        "legacy_access",
+        "canceled"
+      ],
+      "default": "trial"
+    },
+    "trial_started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "trial_ends_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "paid_window_anchor": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "paid_through": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "pending_change": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "upgrade",
+            "downgrade",
+            "interval_change"
+          ]
+        },
+        "target_plan": {
+          "type": "string",
+          "enum": [
+            "starter",
+            "growth"
+          ]
+        },
+        "target_interval": {
+          "type": "string",
+          "enum": [
+            "month",
+            "year"
+          ]
+        },
+        "effective_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "scheduled_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "cancel_at_period_end": {
+      "type": "boolean",
+      "default": false
+    },
+    "canceled_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "legacy_access": {
+      "type": "boolean",
+      "default": false
+    },
+    "legacy_reason": {
+      "type": "string"
+    },
+    "last_sync_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_sync_status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "partial",
+        "failed",
+        "never"
+      ]
+    }
+  },
+  "required": [
+    "workspace_id",
+    "environment"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    }
+  }
+}

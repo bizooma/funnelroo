@@ -1,0 +1,73 @@
+{
+  "name": "BillingEvent",
+  "type": "object",
+  "properties": {
+    "stripe_event_id": {
+      "type": "string"
+    },
+    "environment": {
+      "type": "string",
+      "enum": [
+        "test",
+        "live"
+      ],
+      "default": "test"
+    },
+    "type": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "received",
+        "processing",
+        "completed",
+        "failed"
+      ],
+      "default": "received"
+    },
+    "attempts": {
+      "type": "number",
+      "default": 0
+    },
+    "error": {
+      "type": "string"
+    },
+    "workspace_id": {
+      "type": "string"
+    },
+    "stripe_subscription_id": {
+      "type": "string"
+    },
+    "processed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "stripe_event_id",
+    "type"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    }
+  }
+}

@@ -16,11 +16,12 @@ import {
 } from "lucide-react";
 import CalendlyTab from "@/components/settings/CalendlyTab";
 import CalendlyCallback from "@/components/settings/CalendlyCallback";
+import BillingTab from "@/components/settings/BillingTab";
 
 const TABS = [
   { id: "team", label: "Team", icon: Users },
   { id: "integrations", label: "Integrations", icon: Plug },
-  { id: "billing", label: "Billing", icon: CreditCard, soon: true },
+  { id: "billing", label: "Billing", icon: CreditCard },
   { id: "data", label: "Data controls", icon: Shield, soon: true },
 ];
 
@@ -30,6 +31,7 @@ export default function Settings() {
     const t = new URLSearchParams(window.location.search).get("tab");
     if (t === "brief") return "team"; // brief moved to Marketing kit
     if (t === "integrations") return "integrations";
+    if (t === "billing") return "billing";
     return "team";
   });
 
@@ -55,7 +57,7 @@ export default function Settings() {
         <CalendlyCallback />
         {tab === "team" && <TeamTab canAdmin={canAdmin} />}
         {tab === "integrations" && <CalendlyTab />}
-        {tab === "billing" && <Card><CardContent><ComingSoon title="Billing" description="Stripe subscriptions — one per workspace — with owner-only controls and server-side entitlements." phase="Follow-on Phase 4" /></CardContent></Card>}
+        {tab === "billing" && <BillingTab />}
         {tab === "data" && <Card><CardContent><ComingSoon title="Data controls" description="Export and deletion handling, retention policy and audit records." phase="Follow-on Phase 3-4" /></CardContent></Card>}
       </div>
     </AppShell>
