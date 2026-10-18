@@ -8,11 +8,9 @@ const MARGIN = 18; // 0.25 in
 const CONTENT_W = PAGE_W - MARGIN * 2; // 756 pt
 const CONTENT_H = PAGE_H - MARGIN * 2; // 576 pt
 const EXPORT_WIDTH = 1100; // logical px width of the export card
-const CAPTURE_SCALE = 3; // ~3x for crisp text
-// Readable floor. The card body is 13px; on Letter landscape at 1100px width the
-// width-fit scale is ~0.687, so body text lands near 9pt. We refuse to shrink
-// below this floor and instead route to the overflow path.
-const MIN_BODY_PT = 9;
+const CAPTURE_SCALE = 3; // ~3x for crisp text (resolution only; not a substitute for larger final text)
+const TARGET_BODY_PT = 10;
+const TARGET_CAPTION_PT = 8;
 
 function slug(name) {
   return (name || "persona")
@@ -49,19 +47,30 @@ function imagesOk(rootEl) {
   );
 }
 
-// Decide whether the card fits on one readable page, and at what scale.
+// Decide whether the card fits on one readable page, and at what scale. We
+// measure the actual card width and height, compute the real
+// PDF-points-per-logical-pixel scale, then read the export typography variables
+// (set on .persona-export) to get the actual body and caption font sizes — not
+// an assumed default. The card fits only if the final body and caption text
+// meet the 10pt / 8pt targets at that scale.
+function readVarPx(cs, name, fallback) {
+  const v = parseFloat(cs.getPropertyValue(name));
+  return Number.isFinite(v) && v > 0 ? v : fallback;
+}
+
 function measureFit(rootEl) {
   const card = rootEl.querySelector(".persona-card") || rootEl;
-  const cardHeight = card.offsetHeight || rootEl.offsetHeight || 0;
-  const scaleByWidth = CONTENT_W / EXPORT_WIDTH;
-  if (cardHeight * scaleByWidth <= CONTENT_H) {
-    return { fits: true, scale: scaleByWidth, cardHeight };
-  }
-  const scaleByHeight = CONTENT_H / cardHeight;
-  if (13 * scaleByHeight >= MIN_BODY_PT) {
-    return { fits: true, scale: scaleByHeight, cardHeight };
-  }
-  return { fits: false, scale: scaleByHeight, cardHeight };
+  const cardWidthPx = card.offsetWidth || EXPORT_WIDTH;
+  const cardHeightPx = card.offsetHeight || rootEl.offsetHeight || 0;
+  const scale = Math.min(CONTENT_W / cardWidthPx, CONTENT_H / cardHeightPx);
+  const cs = getComputedStyle(card);
+  const bodyPx = readVarPx(cs, "--pc-body", 13);
+  const captionPx = readVarPx(cs, "--pc-caption", 11);
+  const finalBodyPt = bodyPx * scale;
+  const finalCaptionPt = captionPx * scale;
+  const fits =
+    finalBodyPt >= TARGET_BODY_PT && finalCaptionPt >= TARGET_CAPTION_PT;
+  return { fits, scale, cardHeightPx, finalBodyPt, finalCaptionPt };
 }
 
 async function capture(rootEl) {

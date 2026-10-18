@@ -105,6 +105,16 @@ html {
   z-index: -1;
 }
 
+/* Export-only typography: larger body/caption so the placed PDF meets 10pt body
+   and 8pt caption targets. Only applies inside the export root; the on-screen
+   card uses the fallbacks in PersonaCard and is unchanged. */
+.persona-export {
+  --pc-body: 15px;
+  --pc-heading: 13px;
+  --pc-caption: 12px;
+  --pc-meta: 12px;
+}
+
 /* Export layout: force the reference 3-column (or 2-column) grid regardless of
    browser viewport, so PDF capture and print never stack columns. */
 .persona-export .persona-grid-3 {

@@ -76,7 +76,7 @@ function PersonaCard({ data, meta }, ref) {
             <span className="font-semibold" style={{ fontSize: "15px" }}>{meta.businessName || "Your business"}</span>
           </div>
           <div className="mt-1.5 h-px w-full" style={{ background: onAccent, opacity: 0.3 }} />
-          <div className="mt-1.5 uppercase tracking-[0.18em] font-medium" style={{ fontSize: "11px", opacity: 0.85 }}>
+          <div className="mt-1.5 uppercase tracking-[0.18em] font-medium" style={{ fontSize: "var(--pc-caption, 11px)", opacity: 0.85 }}>
             Persona Card
           </div>
         </div>
@@ -91,7 +91,7 @@ function PersonaCard({ data, meta }, ref) {
               <SectionLabel>Who they are</SectionLabel>
               <div className="mt-1.5 space-y-1">
                 {facts.map((f) => (
-                  <div key={f.label} className="flex gap-2" style={{ fontSize: "13px" }}>
+                  <div key={f.label} className="flex gap-2" style={{ fontSize: "var(--pc-body, 13px)" }}>
                     <span className="font-semibold text-slate-700 min-w-[90px]">{f.label}:</span>
                     <span className="text-slate-600">{f.value}</span>
                   </div>
@@ -107,7 +107,7 @@ function PersonaCard({ data, meta }, ref) {
               <p className="italic text-slate-900" style={{ fontSize: "14px", fontFamily: "ui-serif, Georgia, serif", lineHeight: 1.45 }}>
                 “{data.quote.text}”
               </p>
-              <div className="mt-2 text-slate-800/80" style={{ fontSize: "11px" }}>
+              <div className="mt-2 text-slate-800/80" style={{ fontSize: "var(--pc-caption, 11px)" }}>
                 {quoteKindLabel(data.quote.kind)}
                 {data.quote.source ? ` · ${data.quote.source}` : ""}
               </div>
@@ -120,7 +120,7 @@ function PersonaCard({ data, meta }, ref) {
           {motivations.length > 0 && (
             <div>
               <SectionLabel>Purchasing motivations</SectionLabel>
-              <div className="mt-1.5 text-[11px] text-slate-400">Your team's assessment — not survey results.</div>
+              <div className="mt-1.5 text-slate-400" style={{ fontSize: "var(--pc-caption, 11px)" }}>Your team's assessment — not survey results.</div>
               <div className="mt-2.5 space-y-2.5">
                 {motivations.map((m) => (
                   <MotivationBar key={m.label} label={m.label} rating={m.rating} accent={accent} />
@@ -131,7 +131,7 @@ function PersonaCard({ data, meta }, ref) {
 
           <div className="p-4 rounded" style={{ background: "#EBEBEB" }}>
             <SectionLabel>Bio</SectionLabel>
-            <div className="mt-1.5 text-slate-700" style={{ fontSize: "13px", lineHeight: 1.55 }}>
+            <div className="mt-1.5 text-slate-700" style={{ fontSize: "var(--pc-body, 13px)", lineHeight: 1.55 }}>
               {bio ? (
                 <p>{bio}</p>
               ) : (
@@ -150,7 +150,7 @@ function PersonaCard({ data, meta }, ref) {
             {buyingStyle.length > 0 && (
               <div>
                 <SectionLabel>Buying style</SectionLabel>
-                <div className="mt-1.5 text-[11px] text-slate-400">Team assumptions unless evidence is attached.</div>
+                <div className="mt-1.5 text-slate-400" style={{ fontSize: "var(--pc-caption, 11px)" }}>Team assumptions unless evidence is attached.</div>
                 <div className="mt-2.5 space-y-3">
                   {buyingStyle.map((b) => (
                     <BuyingScale key={b.left + b.right} item={b} accent={accent} />
@@ -163,11 +163,11 @@ function PersonaCard({ data, meta }, ref) {
               <div>
                 <SectionLabel>Messaging guidance</SectionLabel>
                 {meta.messagingAiSuggested && (
-                  <div className="mt-1 uppercase tracking-wide text-amber-600" style={{ fontSize: "10px" }}>Suggested by Roo</div>
+                  <div className="mt-1 uppercase tracking-wide text-amber-600" style={{ fontSize: "var(--pc-caption, 10px)" }}>Suggested by Roo</div>
                 )}
                 <div className="mt-1.5 space-y-1.5">
                   {messagingGuidance.map((g, i) => (
-                    <div key={i} style={{ fontSize: "12px" }}>
+                    <div key={i} style={{ fontSize: "var(--pc-body, 12px)" }}>
                       {g.heading && <span className="font-semibold text-slate-800">{g.heading}: </span>}
                       <span className="text-slate-700">{g.text}</span>
                     </div>
@@ -180,7 +180,7 @@ function PersonaCard({ data, meta }, ref) {
       </div>
 
       {/* FOOTER */}
-      <div className="px-10 py-4 border-t border-slate-200 flex items-center justify-between" style={{ fontSize: "11px" }}>
+      <div className="px-10 py-4 border-t border-slate-200 flex items-center justify-between" style={{ fontSize: "var(--pc-meta, 11px)" }}>
         <div className="text-slate-500">
           {meta.businessName ? `${meta.businessName} · ` : ""}Prepared with FunnelRoo
         </div>
@@ -199,7 +199,7 @@ function PersonaCard({ data, meta }, ref) {
 export default forwardRef(PersonaCard);
 
 function SectionLabel({ children }) {
-  return <div className="font-bold text-slate-900 uppercase tracking-wide" style={{ fontSize: "12px" }}>{children}</div>;
+  return <div className="font-bold text-slate-900 uppercase tracking-wide" style={{ fontSize: "var(--pc-heading, 12px)" }}>{children}</div>;
 }
 
 function Portrait({ url, credit, accent, initials, origin, alt }) {
@@ -219,10 +219,10 @@ function Portrait({ url, credit, accent, initials, origin, alt }) {
     <div>
       <div className="relative w-full overflow-hidden rounded" style={{ aspectRatio: "4 / 3" }}>
         <img src={url} alt={imgAlt} className="w-full h-full object-cover" crossOrigin="anonymous" />
-        {!isAi && credit && <div className="absolute bottom-0 right-0 bg-black/50 text-white px-1.5 py-0.5" style={{ fontSize: "9px" }}>{credit}</div>}
+        {!isAi && credit && <div className="absolute bottom-0 right-0 bg-black/50 text-white px-1.5 py-0.5" style={{ fontSize: "var(--pc-caption, 9px)" }}>{credit}</div>}
       </div>
       {isAi && (
-        <div className="mt-1.5 text-slate-500 italic" style={{ fontSize: "11px" }}>
+        <div className="mt-1.5 text-slate-500 italic" style={{ fontSize: "var(--pc-caption, 11px)" }}>
           AI-generated illustration of this audience — not a real customer.
         </div>
       )}
@@ -236,8 +236,8 @@ function MotivationBar({ label, rating, accent }) {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <span className="font-semibold text-slate-800" style={{ fontSize: "12px" }}>{label}</span>
-        <span className="text-slate-500" style={{ fontSize: "11px" }}>{rated ? RATING_LABELS[rating] : "Not rated"}</span>
+        <span className="font-semibold text-slate-800" style={{ fontSize: "var(--pc-body, 12px)" }}>{label}</span>
+        <span className="text-slate-500" style={{ fontSize: "var(--pc-caption, 11px)" }}>{rated ? RATING_LABELS[rating] : "Not rated"}</span>
       </div>
       <div className="mt-1 h-2.5 rounded-sm overflow-hidden" style={{ background: "#E0E0E0" }}>
         <div className="h-full rounded-sm" style={{ width: `${width}%`, background: accent }} />
@@ -250,14 +250,14 @@ function BuyingScale({ item, accent }) {
   const pos = Math.max(0, Math.min(100, item.position));
   return (
     <div>
-      <div className="flex items-center justify-between text-slate-600" style={{ fontSize: "11px" }}>
+      <div className="flex items-center justify-between text-slate-600" style={{ fontSize: "var(--pc-caption, 11px)" }}>
         <span>{item.left}</span>
         <span>{item.right}</span>
       </div>
       <div className="relative mt-1.5 h-1.5 rounded-full" style={{ background: "#E0E0E0" }}>
         <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-sm" style={{ left: `${pos}%`, background: accent }} />
       </div>
-      {item.pair_label && <div className="mt-1 text-slate-400" style={{ fontSize: "10px" }}>{item.pair_label}</div>}
+      {item.pair_label && <div className="mt-1 text-slate-400" style={{ fontSize: "var(--pc-caption, 10px)" }}>{item.pair_label}</div>}
     </div>
   );
 }
@@ -266,7 +266,7 @@ function BulletSection({ title, items }) {
   return (
     <div>
       <SectionLabel>{title}</SectionLabel>
-      <ul className="mt-1.5 space-y-1 text-slate-700" style={{ fontSize: "13px" }}>
+      <ul className="mt-1.5 space-y-1 text-slate-700" style={{ fontSize: "var(--pc-body, 13px)" }}>
         {items.map((it, i) => (
           <li key={i} className="flex gap-2">
             <span className="text-slate-400 mt-[2px]">•</span>
