@@ -31,7 +31,7 @@ export default function MarketingKit() {
             src="https://media.base44.com/images/public/6acba9de240facdd95f5665d/5be2506ae_waiting.png"
             alt="Roo, the FunnelRoo mascot"
             fittingType="fit"
-            className="w-12 h-12 object-contain shrink-0"
+            className="w-16 h-16 object-contain shrink-0"
           />
           <h1 className="text-2xl font-bold text-slate-900">Marketing kit</h1>
         </div>
