@@ -24,7 +24,7 @@ function textOn(hex) {
 
 const RATING_LABELS = { 1: "Lower", 2: "Lower", 3: "Moderate", 4: "Higher", 5: "Higher" };
 
-function PersonaCard({ data, meta }, ref) {
+function PersonaCard({ data, meta, exportLayout }, ref) {
   const accent = readAccent(meta);
   const onAccent = textOn(accent);
   const title = data.title || meta.name || "Audience archetype";
@@ -42,7 +42,29 @@ function PersonaCard({ data, meta }, ref) {
   const alternatives = data.alternatives || [];
   const bio = data.bio;
 
-  const hasRight = goals.length || frustrations.length || objections.length || alternatives.length || buyingStyle.length || messagingGuidance.length;
+  // Export-layout configuration: when there is no purchasing-motivations section,
+  // the center column has room beneath Bio, so messaging guidance moves there
+  // instead of crowding the narrower right column. On-screen (exportLayout off)
+  // keeps the original right-column assignment.
+  const messagingInCenter = exportLayout && motivations.length === 0;
+  const hasRight = goals.length || frustrations.length || objections.length || alternatives.length || buyingStyle.length || (messagingGuidance.length && !messagingInCenter);
+
+  const messagingBlock = messagingGuidance.length > 0 && (
+    <div>
+      <SectionLabel>Messaging guidance</SectionLabel>
+      {meta.messagingAiSuggested && (
+        <div className="mt-1 uppercase tracking-wide text-amber-600" style={{ fontSize: "var(--pc-caption, 10px)" }}>Suggested by Roo</div>
+      )}
+      <div className="mt-1.5 space-y-1.5">
+        {messagingGuidance.map((g, i) => (
+          <div key={i} style={{ fontSize: "var(--pc-body, 12px)" }}>
+            {g.heading && <span className="font-semibold text-slate-800">{g.heading}: </span>}
+            <span className="text-slate-700">{g.text}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div
@@ -139,6 +161,8 @@ function PersonaCard({ data, meta }, ref) {
               )}
             </div>
           </div>
+
+          {messagingInCenter && messagingBlock}
         </div>
 
         {/* RIGHT */}
@@ -159,22 +183,7 @@ function PersonaCard({ data, meta }, ref) {
               </div>
             )}
             {alternatives.length > 0 && <BulletSection title="Current tools & alternatives" items={alternatives} />}
-            {messagingGuidance.length > 0 && (
-              <div>
-                <SectionLabel>Messaging guidance</SectionLabel>
-                {meta.messagingAiSuggested && (
-                  <div className="mt-1 uppercase tracking-wide text-amber-600" style={{ fontSize: "var(--pc-caption, 10px)" }}>Suggested by Roo</div>
-                )}
-                <div className="mt-1.5 space-y-1.5">
-                  {messagingGuidance.map((g, i) => (
-                    <div key={i} style={{ fontSize: "var(--pc-body, 12px)" }}>
-                      {g.heading && <span className="font-semibold text-slate-800">{g.heading}: </span>}
-                      <span className="text-slate-700">{g.text}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {!messagingInCenter && messagingBlock}
           </div>
         )}
       </div>
@@ -187,7 +196,6 @@ function PersonaCard({ data, meta }, ref) {
         <div className="text-slate-400 flex items-center gap-3">
           {meta.highlightsOnly && <span className="text-slate-500">Selected highlights</span>}
           {meta.stale && <span className="text-amber-600 font-medium">Needs refresh — audience changed</span>}
-          <span>Rev {meta.revision ? meta.revision.slice(0, 8) : "—"}</span>
           <span>Updated {meta.updatedAt || "—"}</span>
           <span>{meta.reviewLabel}</span>
         </div>

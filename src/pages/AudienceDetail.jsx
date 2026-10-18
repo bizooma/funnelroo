@@ -385,6 +385,6 @@ function summaryText(d) {
     lines.push("");
   }
   if (d.alternatives.length) { lines.push("CURRENT TOOLS & ALTERNATIVES"); d.alternatives.forEach((g) => lines.push(`  • ${g}`)); lines.push(""); }
-  lines.push(`Prepared with FunnelRoo · Rev ${d.meta.revision ? d.meta.revision.slice(0, 8) : "—"} · Updated ${d.meta.updatedAt} · ${d.meta.reviewLabel}${d.meta.stale ? " · Needs refresh" : ""}`);
+  lines.push(`Prepared with FunnelRoo · Updated ${d.meta.updatedAt} · ${d.meta.reviewLabel}${d.meta.stale ? " · Needs refresh" : ""}`);
   return lines.join("\n");
 }

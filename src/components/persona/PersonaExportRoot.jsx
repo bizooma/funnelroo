@@ -8,7 +8,7 @@ import PersonaCard from "./PersonaCard";
 function PersonaExportRoot({ data, meta }, ref) {
   return (
     <div ref={ref} className="persona-export" style={{ width: 1100, background: "#ffffff" }}>
-      <PersonaCard data={data} meta={meta} />
+      <PersonaCard data={data} meta={meta} exportLayout />
     </div>
   );
 }

@@ -24,16 +24,8 @@ export const personaFixture = {
     credit: "",
     alt: "AI-generated illustrative portrait of this audience — not a real customer",
   },
-  quote: {
-    text: "We need a steady pipeline of qualified matters, not more generic leads.",
-    source: "Illustrative",
-    kind: "illustrative",
-  },
-  motivations: [
-    { label: "Predictable pipeline", rating: 4 },
-    { label: "Firm reputation", rating: 5 },
-    { label: "Partner buy-in", rating: 3 },
-  ],
+  // No quote and no purchasing-motivations section — matches the one-page
+  // reference layout: messaging guidance sits in the center column under Bio.
   buyingStyle: [],
   messagingGuidance: [
     { heading: "Lead with outcomes", text: "Frame the offer around qualified consultations, not raw lead counts." },
