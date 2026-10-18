@@ -8,12 +8,19 @@ import {
   HttpError,
   audienceContentHash,
 } from "../../shared/auth.ts";
+import {
+  sanitizePreferences,
+  buildPortraitPrompt,
+  isValidGeneratedUrl,
+  publicRequestView,
+} from "../../shared/personaPortrait.ts";
 import { evaluateReadiness, nextDashboardAction } from "../../shared/readiness.ts";
 
 // Allowlist + light validation for the persona presentation object.
 const PERSONA_KEYS = [
   "title", "subtitle", "role", "industry", "company_size", "location",
   "buying_role", "age", "family", "portrait_url", "portrait_credit",
+  "portrait_origin", "portrait_alt", "portrait_applied_at",
   "quote_text", "quote_source", "quote_kind", "bio_summary",
   "motivations", "buying_style", "messaging_guidance", "messaging_ai_suggested",
   "theme", "highlights_only",
@@ -549,6 +556,123 @@ export default async function (req) {
         });
       }
       return ok({ funnel, resumed: false });
+    }
+
+    // ---- Persona portrait generation (Roo) ----
+    // Generates an illustrative portrait from the audience's identity facts
+    // only. One in-flight request per audience: repeated clicks or a reconnect
+    // recover the same tracked request instead of launching another job. The
+    // candidate is never applied without an explicit "Use this image", and the
+    // current portrait is preserved if generation fails or is dismissed.
+    // Portrait changes are presentation-only: they do not mark the audience
+    // Ready, clear a content-staleness warning, or affect text review.
+    if (action === "generatePersonaPortrait") {
+      const { user } = await requireMembership(base44, body.workspace_id, ["owner", "admin", "member"]);
+      const audience = firstRecord(
+        await sr.entities.Audience.filter({ id: body.id, workspace_id: body.workspace_id })
+      );
+      if (!audience) return err(404, "Audience not found");
+      const revision = audienceContentHash(audience);
+      const prefs = sanitizePreferences(body.visual_preferences);
+      const STALE_PENDING_MS = 3 * 60 * 1000;
+      // Recover an in-flight request instead of launching a duplicate job.
+      const pending = asArray(
+        await sr.entities.PersonaPortraitRequest.filter(
+          { audience_id: body.id, state: "pending" },
+          { sort: "-created_date", limit: 1 }
+        )
+      );
+      if (pending[0]) {
+        if (Date.now() - new Date(pending[0].created_date).getTime() > STALE_PENDING_MS) {
+          await sr.entities.PersonaPortraitRequest.update(pending[0].id, { state: "failed", error: "Timed out" });
+        } else {
+          return ok({ request: publicRequestView(pending[0]), audience_revision: revision });
+        }
+      }
+      const requestId = crypto.randomUUID();
+      const prompt = buildPortraitPrompt(audience, prefs);
+      let request = await sr.entities.PersonaPortraitRequest.create({
+        workspace_id: body.workspace_id,
+        audience_id: body.id,
+        request_id: requestId,
+        user_id: user.id,
+        source_audience_revision: revision,
+        visual_preferences: prefs,
+        state: "pending",
+        prompt,
+      });
+      try {
+        const result = await sr.integrations.Core.GenerateImage({ prompt });
+        const url = result?.url;
+        if (!isValidGeneratedUrl(url)) throw new Error("Image provider returned an unusable result");
+        request = await sr.entities.PersonaPortraitRequest.update(request.id, {
+          state: "ready",
+          candidate_url: url,
+        });
+        return ok({ request: publicRequestView(request), audience_revision: revision });
+      } catch (e) {
+        await sr.entities.PersonaPortraitRequest.update(request.id, {
+          state: "failed",
+          error: String(e.message || e).slice(0, 300),
+        });
+        return err(502, "Portrait generation failed. Your current image was kept.");
+      }
+    }
+
+    if (action === "getPersonaPortrait") {
+      await requireMembership(base44, body.workspace_id);
+      const audience = firstRecord(
+        await sr.entities.Audience.filter({ id: body.id, workspace_id: body.workspace_id })
+      );
+      if (!audience) return err(404, "Audience not found");
+      const revision = audienceContentHash(audience);
+      const reqs = asArray(
+        await sr.entities.PersonaPortraitRequest.filter(
+          { audience_id: body.id, state: { $in: ["pending", "ready"] } },
+          { sort: "-created_date", limit: 1 }
+        )
+      );
+      return ok({ request: reqs[0] ? publicRequestView(reqs[0]) : null, audience_revision: revision });
+    }
+
+    if (action === "applyPersonaPortrait") {
+      await requireMembership(base44, body.workspace_id, ["owner", "admin", "member"]);
+      const audience = firstRecord(
+        await sr.entities.Audience.filter({ id: body.id, workspace_id: body.workspace_id })
+      );
+      if (!audience) return err(404, "Audience not found");
+      const req = firstRecord(
+        await sr.entities.PersonaPortraitRequest.filter({
+          request_id: body.request_id, audience_id: body.id, workspace_id: body.workspace_id,
+        })
+      );
+      if (!req) return err(404, "Portrait request not found");
+      if (req.state !== "ready" || !req.candidate_url) return err(400, "This portrait is not ready to apply");
+      // Merge only portrait fields into the current persona — never replace the
+      // whole object — so unsaved or newer edits to other fields are preserved.
+      const persona = {
+        ...(audience.persona || {}),
+        portrait_url: req.candidate_url,
+        portrait_credit: "AI-generated illustration of this audience — not a real customer.",
+        portrait_origin: "ai",
+        portrait_alt: "AI-generated illustrative portrait of this audience — not a real customer.",
+        portrait_applied_at: new Date().toISOString(),
+      };
+      const updated = await sr.entities.Audience.update(body.id, { persona });
+      await sr.entities.PersonaPortraitRequest.update(req.id, { state: "applied" });
+      return ok({ audience: updated });
+    }
+
+    if (action === "dismissPersonaPortrait") {
+      await requireMembership(base44, body.workspace_id, ["owner", "admin", "member"]);
+      const req = firstRecord(
+        await sr.entities.PersonaPortraitRequest.filter({
+          request_id: body.request_id, audience_id: body.id, workspace_id: body.workspace_id,
+        })
+      );
+      if (!req) return err(404, "Portrait request not found");
+      await sr.entities.PersonaPortraitRequest.update(req.id, { state: "dismissed" });
+      return ok({ dismissed: true });
     }
 
     return err(400, `Unknown action: ${action}`);

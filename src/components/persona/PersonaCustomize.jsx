@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useWorkspace } from "@/lib/workspaceContext";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -6,17 +7,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Plus, X } from "lucide-react";
+import { Loader2, Plus, X, Sparkles } from "lucide-react";
 import { THEME_PRESETS } from "./buildCardData";
+import PersonaPortraitGenerator from "./PersonaPortraitGenerator";
 
 // Compact customization panel for persona presentation metadata.
 // Core facts remain bound to the Audience editor — this edits only the
 // `persona` presentation object.
-export default function PersonaCustomize({ open, persona, onClose, onSave }) {
+export default function PersonaCustomize({ open, persona, onClose, onSave, audienceId }) {
+  const { current } = useWorkspace();
   const [form, setForm] = useState(persona || {});
   const [saving, setSaving] = useState(false);
+  const [portraitGen, setPortraitGen] = useState(false);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  // AI portrait apply already persisted server-side; reflect it in the form so
+  // the user sees the change. Saving the card re-persists consistently.
+  function handlePortraitApplied(fields) {
+    setForm((f) => ({ ...f, ...fields }));
+  }
 
   function setMotivation(i, key, val) {
     setForm((f) => {
@@ -98,6 +108,12 @@ export default function PersonaCustomize({ open, persona, onClose, onSave }) {
             <Row label="Portrait image URL">
               <Input value={form.portrait_url || ""} onChange={(e) => set("portrait_url", e.target.value)} placeholder="https://…" />
             </Row>
+            <div className="mt-1.5">
+              <Button size="sm" variant="outline" onClick={() => setPortraitGen(true)} disabled={!audienceId}>
+                <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Generate with Roo
+              </Button>
+              <p className="text-[11px] text-slate-400 mt-1">Roo creates an illustrative portrait from this audience's role and context — no photo or prompt needed.</p>
+            </div>
             <Row label="Image credit / source">
               <Input value={form.portrait_credit || ""} onChange={(e) => set("portrait_credit", e.target.value)} />
             </Row>
@@ -212,6 +228,16 @@ export default function PersonaCustomize({ open, persona, onClose, onSave }) {
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {portraitGen && audienceId && (
+        <PersonaPortraitGenerator
+          open={portraitGen}
+          audienceId={audienceId}
+          audienceRevision={null}
+          onClose={() => setPortraitGen(false)}
+          onApplied={handlePortraitApplied}
+        />
+      )}
     </Dialog>
   );
 }

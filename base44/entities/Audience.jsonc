@@ -102,6 +102,20 @@
         "portrait_credit": {
           "type": "string"
         },
+        "portrait_origin": {
+          "type": "string",
+          "enum": [
+            "ai",
+            "upload"
+          ]
+        },
+        "portrait_alt": {
+          "type": "string"
+        },
+        "portrait_applied_at": {
+          "type": "string",
+          "format": "date-time"
+        },
         "quote_text": {
           "type": "string"
         },

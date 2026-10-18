@@ -8,10 +8,11 @@ import { toast } from "@/components/ui/use-toast";
 import PersonaCard from "@/components/persona/PersonaCard";
 import PersonaCustomize from "@/components/persona/PersonaCustomize";
 import PersonaRefine from "@/components/persona/PersonaRefine";
+import PersonaPortraitGenerator from "@/components/persona/PersonaPortraitGenerator";
 import { AudienceEditor } from "@/components/marketing-kit/AudienceManager";
 import { buildCardData } from "@/components/persona/buildCardData";
 import {
-  ArrowLeft, Pencil, SlidersHorizontal, Sparkles, Copy, Download, Printer, Rocket, Loader2, AlertTriangle,
+  ArrowLeft, Pencil, SlidersHorizontal, Sparkles, Copy, Download, Printer, Rocket, Loader2, AlertTriangle, Image as ImageIcon,
 } from "lucide-react";
 
 export default function AudienceDetail() {
@@ -24,6 +25,7 @@ export default function AudienceDetail() {
   const [customizing, setCustomizing] = useState(false);
   const [refining, setRefining] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [portraitGen, setPortraitGen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [audienceRevision, setAudienceRevision] = useState(null);
@@ -99,6 +101,13 @@ export default function AudienceDetail() {
     } catch (e) {
       toast({ title: "Review failed", description: e.response?.data?.error || e.message, variant: "destructive" });
     }
+  }
+
+  // AI portrait apply: the backend has already persisted the portrait; merge
+  // only the portrait fields into local state so unsaved edits to other fields
+  // are preserved. Portrait is presentation-only and never affects review state.
+  function handlePortraitApplied(fields) {
+    setAudience((a) => ({ ...a, persona: { ...(a.persona || {}), ...fields } }));
   }
 
   function applyRefine(field, value) {
@@ -178,6 +187,7 @@ export default function AudienceDetail() {
           <Button variant="outline" onClick={() => setEditing(true)}><Pencil className="w-4 h-4 mr-1.5" /> Edit audience</Button>
           <Button variant="outline" onClick={() => setCustomizing(true)}><SlidersHorizontal className="w-4 h-4 mr-1.5" /> Customize card</Button>
           <Button variant="outline" onClick={() => setRefining(true)}><Sparkles className="w-4 h-4 mr-1.5" /> Refine with Roo</Button>
+          <Button variant="outline" onClick={() => setPortraitGen(true)}><ImageIcon className="w-4 h-4 mr-1.5" /> Portrait</Button>
           {needsReview && (
             <Button variant="outline" onClick={reviewPersona}>
               <span className="w-2 h-2 rounded-full bg-emerald-500 mr-1.5" /> Review & mark up to date
@@ -229,6 +239,7 @@ export default function AudienceDetail() {
         <PersonaCustomize
           open={customizing}
           persona={audience.persona || {}}
+          audienceId={audience.id}
           onClose={() => setCustomizing(false)}
           onSave={savePersona}
         />
@@ -249,6 +260,16 @@ export default function AudienceDetail() {
           audience={audience}
           onClose={() => setEditing(false)}
           onSaved={() => { setEditing(false); load(); }}
+        />
+      )}
+
+      {portraitGen && (
+        <PersonaPortraitGenerator
+          open={portraitGen}
+          audienceId={audience.id}
+          audienceRevision={audienceRevision}
+          onClose={() => setPortraitGen(false)}
+          onApplied={handlePortraitApplied}
         />
       )}
     </AppShell>

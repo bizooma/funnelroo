@@ -1,0 +1,93 @@
+{
+  "name": "PersonaPortraitRequest",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "audience_id": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "user_id": {
+      "type": "string"
+    },
+    "source_audience_revision": {
+      "type": "string"
+    },
+    "visual_preferences": {
+      "type": "object",
+      "properties": {
+        "style": {
+          "type": "string",
+          "enum": [
+            "photo",
+            "illustration"
+          ],
+          "default": "photo"
+        },
+        "background": {
+          "type": "string",
+          "enum": [
+            "workplace",
+            "studio",
+            "neutral"
+          ],
+          "default": "workplace"
+        },
+        "appearance": {
+          "type": "string"
+        }
+      }
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "ready",
+        "applied",
+        "failed",
+        "dismissed"
+      ],
+      "default": "pending"
+    },
+    "candidate_url": {
+      "type": "string"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "error": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "audience_id",
+    "request_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "__server_only__"
+      }
+    }
+  }
+}

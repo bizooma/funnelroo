@@ -27,7 +27,7 @@ export function buildCardData(audience, profile) {
     title: p.title || audience?.name || "Audience archetype",
     subtitle: p.subtitle,
     facts,
-    portrait: { url: p.portrait_url, credit: p.portrait_credit },
+    portrait: { url: p.portrait_url, credit: p.portrait_credit, origin: p.portrait_origin, alt: p.portrait_alt },
     quote: { text: p.quote_text, source: p.quote_source, kind: p.quote_kind },
     motivations: p.motivations || [],
     buyingStyle: p.buying_style || [],

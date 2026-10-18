@@ -100,7 +100,7 @@ function PersonaCard({ data, meta }, ref) {
             </div>
           )}
 
-          <Portrait url={hasPortrait ? data.portrait.url : null} credit={data.portrait?.credit} accent={accent} initials={data.initials} />
+          <Portrait url={hasPortrait ? data.portrait.url : null} credit={data.portrait?.credit} origin={data.portrait?.origin} alt={data.portrait?.alt} accent={accent} initials={data.initials} />
 
           {hasQuote && (
             <div className="p-4" style={{ background: accent }}>
@@ -202,7 +202,7 @@ function SectionLabel({ children }) {
   return <div className="font-bold text-slate-900 uppercase tracking-wide" style={{ fontSize: "12px" }}>{children}</div>;
 }
 
-function Portrait({ url, credit, accent, initials }) {
+function Portrait({ url, credit, accent, initials, origin, alt }) {
   if (!url) {
     return (
       <div
@@ -213,10 +213,19 @@ function Portrait({ url, credit, accent, initials }) {
       </div>
     );
   }
+  const isAi = origin === "ai";
+  const imgAlt = alt || (isAi ? "AI-generated illustrative portrait of this audience — not a real customer" : credit ? `Representative image. ${credit}` : "Representative image");
   return (
-    <div className="relative w-full overflow-hidden rounded" style={{ aspectRatio: "4 / 3" }}>
-      <img src={url} alt={credit ? `Representative image. ${credit}` : "Representative image"} className="w-full h-full object-cover" crossOrigin="anonymous" />
-      {credit && <div className="absolute bottom-0 right-0 bg-black/50 text-white px-1.5 py-0.5" style={{ fontSize: "9px" }}>{credit}</div>}
+    <div>
+      <div className="relative w-full overflow-hidden rounded" style={{ aspectRatio: "4 / 3" }}>
+        <img src={url} alt={imgAlt} className="w-full h-full object-cover" crossOrigin="anonymous" />
+        {!isAi && credit && <div className="absolute bottom-0 right-0 bg-black/50 text-white px-1.5 py-0.5" style={{ fontSize: "9px" }}>{credit}</div>}
+      </div>
+      {isAi && (
+        <div className="mt-1.5 text-slate-500 italic" style={{ fontSize: "11px" }}>
+          AI-generated illustration of this audience — not a real customer.
+        </div>
+      )}
     </div>
   );
 }
