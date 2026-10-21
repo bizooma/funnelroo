@@ -1,5 +1,12 @@
 import { createClientFromRequest } from "npm:@base44/sdk@0.8.52";
 import { requireMembership, firstRecord, asArray, ok, err, HttpError, audienceContentHash } from "../../shared/auth.ts";
+import {
+  beginMeteredAction,
+  completeMeteredAction,
+  abortMeteredAction,
+  limitBody,
+  httpStatusForLimit,
+} from "../../shared/enforce.ts";
 
 // Roo: the contextual assistant. Drafts content from the approved brief only.
 // Never invents testimonials, results, qualifications, deadlines or scarcity.
@@ -23,6 +30,46 @@ export default async function (req) {
 
     // Roo always operates within an authorized workspace.
     await requireMembership(base44, body.workspace_id);
+
+    // Metered AI text action. Capacity is reserved BEFORE the provider call and
+    // consumed on success / released on failure, under one logical operation
+    // identity: the caller's operation id when it supplies one, so a retry of the
+    // same request resolves to the same reservation instead of spending another
+    // unit. Viewing, applying, saving and exporting never reach this path.
+    const aiText = async (actionName, prompt, schema) => {
+      const decision = await beginMeteredAction(sr, {
+        workspaceId: body.workspace_id,
+        action: actionName,
+        metric: "ai_text",
+        operationKey: body.operation_id ? `${actionName}:${body.operation_id}` : undefined,
+        payload: {
+          action: actionName,
+          funnel_type: body.funnel_type || "",
+          goal: body.goal || "",
+          audience_id: body.audience_id || "",
+          offer_id: body.offer_id || "",
+          instruction: body.instruction || "",
+          step: actionName === "rewriteStep" ? body.step || null : null,
+        },
+      });
+      if (!decision.allowed) return { blocked: decision.report };
+      try {
+        const result = await sr.integrations.Core.InvokeLLM({
+          prompt,
+          response_json_schema: schema,
+        });
+        await completeMeteredAction(sr, decision, body.workspace_id);
+        return { result };
+      } catch (e) {
+        await abortMeteredAction(sr, decision, body.workspace_id);
+        throw e;
+      }
+    };
+    const limitBlocked = (report) =>
+      Response.json(limitBody(report), {
+        status: httpStatusForLimit(report),
+        headers: { "Content-Type": "application/json" },
+      });
 
     // Load the shared brief for context.
     const profile = firstRecord(
@@ -91,11 +138,9 @@ Draft the hero section and a benefits section for this funnel's landing page.
 The benefits should reflect the audience's desired outcomes and the offer's value.
 Do not invent proof. If the brief lacks specifics, keep copy general and note it.
 Return JSON matching this schema: ${JSON.stringify(schema)}`;
-      const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
-        prompt,
-        response_json_schema: schema,
-      });
-      return ok({ draft: result, ai_suggested: true });
+      const ai = await aiText("draftPageCopy", prompt, schema);
+      if (ai.blocked) return limitBlocked(ai.blocked);
+      return ok({ draft: ai.result, ai_suggested: true });
     }
 
     // ---- draftAudience: suggest an audience from the brief ----
@@ -118,11 +163,9 @@ ${briefText}
 
 Propose ONE target audience for this business based on the brief. Mark inferred assumptions as AI suggestions in the notes. Do not invent statistics.
 Return JSON matching this schema: ${JSON.stringify(schema)}`;
-      const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
-        prompt,
-        response_json_schema: schema,
-      });
-      return ok({ draft: result, ai_suggested: true });
+      const ai = await aiText("draftAudience", prompt, schema);
+      if (ai.blocked) return limitBlocked(ai.blocked);
+      return ok({ draft: ai.result, ai_suggested: true });
     }
 
     // ---- draftOffer: suggest an offer for a goal ----
@@ -144,11 +187,9 @@ ${briefText}
 
 Propose an offer for the goal "${body.goal || "lead_magnet"}". The CTA should match the goal. Do not invent results or testimonials; if proof is missing, suggest the user add it.
 Return JSON matching this schema: ${JSON.stringify(schema)}`;
-      const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
-        prompt,
-        response_json_schema: schema,
-      });
-      return ok({ draft: result, ai_suggested: true });
+      const ai = await aiText("draftOffer", prompt, schema);
+      if (ai.blocked) return limitBlocked(ai.blocked);
+      return ok({ draft: ai.result, ai_suggested: true });
     }
 
     // ---- draftSequence: propose a complete 4-email nurture sequence ----
@@ -194,11 +235,9 @@ Rules:
 - If proof is missing, keep the objection response general and note it.
 - Body should be simple HTML (paragraphs with <p> tags).
 Return JSON matching this schema: ${JSON.stringify(schema)}`;
-      const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
-        prompt,
-        response_json_schema: schema,
-      });
-      return ok({ draft: result, ai_suggested: true });
+      const ai = await aiText("draftSequence", prompt, schema);
+      if (ai.blocked) return limitBlocked(ai.blocked);
+      return ok({ draft: ai.result, ai_suggested: true });
     }
 
     // ---- rewriteStep: rewrite a single email step ----
@@ -224,14 +263,13 @@ ${briefText}
 Rewrite this nurture email. Instruction: ${instruction}
 Current step: ${JSON.stringify(step)}
 Keep the same merge fields. Do not invent proof or statistics. Return JSON matching this schema: ${JSON.stringify(schema)}`;
-      const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
-        prompt,
-        response_json_schema: schema,
-      });
-      return ok({ draft: result, ai_suggested: true });
+      const ai = await aiText("rewriteStep", prompt, schema);
+      if (ai.blocked) return limitBlocked(ai.blocked);
+      return ok({ draft: ai.result, ai_suggested: true });
     }
 
     // ---- suggestNextStep: Roo explains the next useful action ----
+    // Not metered: this is a navigation hint, not a requested draft result.
     if (action === "suggestNextStep") {
       const context = body.context || {};
       const schema = {
@@ -298,12 +336,10 @@ Help present this audience as a one-page persona card for internal marketing ref
 4. Suggest up to 6 purchasing-relevant motivation labels for this audience (labels only, no ratings).
 5. Offer 2-3 short messaging guidance notes for speaking to this audience. For each, optionally label it with a concise heading such as "Lead with", "Address", or "Avoid" where it fits the content; leave heading empty otherwise. Return each as { heading, text }.
 Mark anything inferred as an AI suggestion in the notes. Return JSON matching this schema: ${JSON.stringify(schema)}`;
-      const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
-        prompt,
-        response_json_schema: schema,
-      });
+      const ai = await aiText("refinePersona", prompt, schema);
+      if (ai.blocked) return limitBlocked(ai.blocked);
       return ok({
-        draft: { ...result, provenance: "Suggested by Roo — review needed" },
+        draft: { ...ai.result, provenance: "Suggested by Roo — review needed" },
         source_revision: audienceContentHash(audience),
         ai_suggested: true,
       });

@@ -1,5 +1,5 @@
 import { createClientFromRequest } from "npm:@base44/sdk@0.8.52";
-import { ok, err } from "../../shared/auth.ts";
+import { ok, err, isPlatformOperator } from "../../shared/auth.ts";
 import { dispatchDueMessages, isProviderConfigured } from "../../shared/nurture.ts";
 
 // Scheduled dispatch entry point. Called by the NurtureDispatch workflow
@@ -18,9 +18,20 @@ export default async function (req) {
     const origin = (() => {
       try { return new URL(req.url).origin; } catch { return ""; }
     })();
-    // mock=true forces the mock provider (for tests). Otherwise uses Resend
-    // if RESEND_API_KEY is configured, or mock if not.
-    const mock = body.mock === true || !isProviderConfigured();
+    // mock=true forces the mock provider (for tests). The explicit mock is a test
+    // affordance: only the platform operator may force it. Everyone else gets the
+    // real provider when it is configured (and the mock only as the fallback when
+    // no provider exists at all).
+    let operatorForcedMock = false;
+    if (body.mock === true) {
+      try {
+        const user = await base44.auth.me();
+        operatorForcedMock = isPlatformOperator(user);
+      } catch {
+        operatorForcedMock = false;
+      }
+    }
+    const mock = operatorForcedMock || !isProviderConfigured();
     const result = await dispatchDueMessages(sr, origin, { mock, batch: body.batch });
     return ok(result);
   } catch (e) {

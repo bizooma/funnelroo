@@ -7,13 +7,18 @@ import {
   err,
   HttpError,
   audienceContentHash,
+  isPlatformOperator,
 } from "../../shared/auth.ts";
 import {
   sanitizePreferences,
   buildPortraitPrompt,
   isValidGeneratedUrl,
   publicRequestView,
+  generateAudiencePortrait,
+  createMockImageProvider,
 } from "../../shared/personaPortrait.ts";
+import { enforcementEnabled } from "../../shared/entitlements.ts";
+import { ENVIRONMENT } from "../../shared/stripeCatalog.ts";
 import { evaluateReadiness, nextDashboardAction } from "../../shared/readiness.ts";
 
 // Allowlist + light validation for the persona presentation object.
@@ -572,51 +577,51 @@ export default async function (req) {
         await sr.entities.Audience.filter({ id: body.id, workspace_id: body.workspace_id })
       );
       if (!audience) return err(404, "Audience not found");
-      const revision = audienceContentHash(audience);
       const prefs = sanitizePreferences(body.visual_preferences);
-      const STALE_PENDING_MS = 3 * 60 * 1000;
-      // Recover an in-flight request instead of launching a duplicate job.
-      const pending = asArray(
-        await sr.entities.PersonaPortraitRequest.filter(
-          { audience_id: body.id, state: "pending" },
-          { sort: "-created_date", limit: 1 }
-        )
-      );
-      if (pending[0]) {
-        if (Date.now() - new Date(pending[0].created_date).getTime() > STALE_PENDING_MS) {
-          await sr.entities.PersonaPortraitRequest.update(pending[0].id, { state: "failed", error: "Timed out" });
-        } else {
-          return ok({ request: publicRequestView(pending[0]), audience_revision: revision });
+
+      // A controlled mock image provider is reachable ONLY by the platform
+      // operator, and only on a workspace already designated for enforcement.
+      // Ordinary customers can never select it.
+      let provider;
+      if (body.mock_provider === true) {
+        if (!isPlatformOperator(user)) {
+          return err(403, "The mock image provider is restricted to the platform operator.");
         }
+        const billing = firstRecord(
+          await sr.entities.WorkspaceBilling.filter({
+            workspace_id: body.workspace_id,
+            environment: ENVIRONMENT,
+          })
+        );
+        if (!enforcementEnabled(billing)) {
+          return err(403, "The mock image provider is only available on a designated test workspace.");
+        }
+        provider = createMockImageProvider();
       }
-      const requestId = crypto.randomUUID();
-      const prompt = buildPortraitPrompt(audience, prefs);
-      let request = await sr.entities.PersonaPortraitRequest.create({
-        workspace_id: body.workspace_id,
-        audience_id: body.id,
-        request_id: requestId,
-        user_id: user.id,
-        source_audience_revision: revision,
-        visual_preferences: prefs,
-        state: "pending",
-        prompt,
+
+      const outcome = await generateAudiencePortrait({
+        sr,
+        workspaceId: body.workspace_id,
+        audience,
+        prefs,
+        userId: user.id,
+        requestId: body.request_id ? String(body.request_id) : undefined,
+        provider,
       });
-      try {
-        const result = await sr.integrations.Core.GenerateImage({ prompt });
-        const url = result?.url;
-        if (!isValidGeneratedUrl(url)) throw new Error("Image provider returned an unusable result");
-        request = await sr.entities.PersonaPortraitRequest.update(request.id, {
-          state: "ready",
-          candidate_url: url,
-        });
-        return ok({ request: publicRequestView(request), audience_revision: revision });
-      } catch (e) {
-        await sr.entities.PersonaPortraitRequest.update(request.id, {
-          state: "failed",
-          error: String(e.message || e).slice(0, 300),
-        });
-        return err(502, "Portrait generation failed. Your current image was kept.");
+      if (!outcome.ok) {
+        if (outcome.limit) {
+          return Response.json(outcome.limit, {
+            status: outcome.status,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return err(outcome.status, outcome.error || "Portrait generation failed.");
       }
+      return ok({
+        request: outcome.request,
+        audience_revision: outcome.audience_revision,
+        generated: outcome.generated,
+      });
     }
 
     if (action === "getPersonaPortrait") {

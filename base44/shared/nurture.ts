@@ -5,6 +5,11 @@
 // unsubscribeAccess (public unsubscribe).
 
 import { firstRecord, asArray } from "./auth.ts";
+import {
+  beginMeteredAction,
+  completeMeteredAction,
+  abortMeteredAction,
+} from "./enforce.ts";
 import { secrets } from "base44:runtime";
 
 // --- Constants ---
@@ -682,6 +687,26 @@ async function processOneMessage(sr, msg, origin, mock, now) {
     return { id: msg.id, skipped: "sender_missing" };
   }
 
+  // Metered promotional email send. Capacity is reserved BEFORE the provider call
+  // under this message's stable identity, so retrying the same message never
+  // charges twice. A blocked send returns the message to the queue without
+  // counting an attempt, and the provider is never contacted.
+  const meter = await beginMeteredAction(sr, {
+    workspaceId: enrollment.workspace_id,
+    action: "nurture_email",
+    metric: "email_send",
+    operationKey: `nurture:${msg.idempotency_key || msg.id}`,
+    payload: { enrollment_id: msg.enrollment_id, step_index: msg.step_index },
+  });
+  if (!meter.allowed) {
+    await sr.entities.NurtureMessage.update(msg.id, {
+      outcome: "queued",
+      due_at: now.toISOString(),
+      last_error: meter.report?.message || "Email allowance reached",
+    });
+    return { id: msg.id, sent: false, blocked: "email_allowance" };
+  }
+
   // Atomically claim: only if still queued
   const leaseExpiry = new Date(now.getTime() + CLAIM_LEASE_SECONDS * 1000);
   const claim = await sr.entities.NurtureMessage.updateMany(
@@ -692,6 +717,7 @@ async function processOneMessage(sr, msg, origin, mock, now) {
     }
   );
   if (!claim.updated) {
+    await abortMeteredAction(sr, meter, enrollment.workspace_id);
     return { id: msg.id, skipped: "claim_lost" };
   }
 
@@ -754,6 +780,11 @@ async function processOneMessage(sr, msg, origin, mock, now) {
     const outsideWindow = (now.getTime() - firstAttemptMs) > windowMs;
 
     if (outsideWindow && retryable) {
+      // Uncertain outcome: the provider may already have accepted this message.
+      // Keep the unit consumed rather than releasing it. A later retry carries the
+      // SAME identity, so it can never spend a second unit — the reservation stays
+      // consistent without resetting counters or failing open.
+      await completeMeteredAction(sr, meter, enrollment.workspace_id);
       // Unknown outcome outside the provider window → reconciliation
       await sr.entities.NurtureMessage.update(msg.id, {
         outcome: "needs_reconciliation",
@@ -763,6 +794,7 @@ async function processOneMessage(sr, msg, origin, mock, now) {
       return { id: msg.id, needs_reconciliation: true };
     }
 
+    await abortMeteredAction(sr, meter, enrollment.workspace_id);
     await sr.entities.NurtureMessage.update(msg.id, {
       outcome: retryable ? "retryable_failure" : "permanently_failed",
       last_error: errMsg,

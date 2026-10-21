@@ -11,6 +11,11 @@
 // false and senders are not domain-verified.
 
 import { firstRecord, asArray } from "./auth.ts";
+import {
+  beginMeteredAction,
+  completeMeteredAction,
+  abortMeteredAction,
+} from "./enforce.ts";
 
 const MAX_ATTEMPTS = 3;
 
@@ -150,6 +155,27 @@ export async function processDeliveryJob(base44, job, origin) {
   const subject = `Your ${resourceTitle} from ${businessName || "FunnelRoo"}`;
   const html = brandedEmail({ resourceTitle, businessName, recipientName: job.recipient_name, accessUrl });
 
+  // Metered email send. Capacity is reserved BEFORE the provider call and tied to
+  // this delivery's stable identity, so retrying the same delivery never charges
+  // twice. A blocked send leaves the job untouched (no attempt is counted, the
+  // provider is never called) so it completes once capacity is available.
+  const meter = await beginMeteredAction(sr, {
+    workspaceId: job.workspace_id,
+    action: "resource_email",
+    metric: "email_send",
+    operationKey: `delivery:${job.idempotency_key || job.id}`,
+    payload: {
+      submission_id: job.submission_id,
+      resource_version_id: job.resource_version_id,
+    },
+  });
+  if (!meter.allowed) {
+    return await sr.entities.DeliveryJob.update(job.id, {
+      state: "pending",
+      last_error: meter.report?.message || "Email allowance reached",
+    });
+  }
+
   // Atomically claim: set state to "processing" only if still pending/failed.
   // This prevents two concurrent processors from both sending — the first to
   // claim wins; the second's updateMany doesn't match (state is now "processing").
@@ -158,7 +184,9 @@ export async function processDeliveryJob(base44, job, origin) {
     { $set: { state: "processing" }, $inc: { attempts: 1 } }
   );
   if (!claim.updated) {
-    // Someone else claimed it, or it's no longer in a processable state
+    // Someone else claimed it, or it's no longer in a processable state. Give the
+    // reservation back — this processor is not doing the paid work.
+    await abortMeteredAction(sr, meter, job.workspace_id);
     return firstRecord(await sr.entities.DeliveryJob.filter({ id: job.id })) || job;
   }
 
@@ -170,6 +198,7 @@ export async function processDeliveryJob(base44, job, origin) {
       from_name: sender.from_name || businessName || "FunnelRoo",
     });
     // Provider accepted the request. Provider acceptance != inbox delivery.
+    await completeMeteredAction(sr, meter, job.workspace_id);
     const messageId = result?.messageId || result?.id || result?.message_id || "";
     return await sr.entities.DeliveryJob.update(job.id, {
       state: "provider_accepted",
@@ -178,6 +207,8 @@ export async function processDeliveryJob(base44, job, origin) {
     });
   } catch (e) {
     const msg = String(e?.message || e);
+    // The send did not happen: give the reserved unit back before recording state.
+    await abortMeteredAction(sr, meter, job.workspace_id);
     // Distinguish suppression-class failures from other errors
     const suppressed = /suppress|unsubscribe|bounce|complaint|invalid|not.*verified|domain/i.test(msg);
     // Distinguish uncertain outcomes (network/timeout) from known failures

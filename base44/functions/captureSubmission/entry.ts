@@ -2,6 +2,7 @@ import { createClientFromRequest } from "npm:@base44/sdk@0.8.52";
 import { firstRecord, asArray, ok, err, computeFingerprint, dedupKeepOldest } from "../../shared/auth.ts";
 import { processDeliveryJob } from "../../shared/delivery.ts";
 import { tryEnroll } from "../../shared/nurture.ts";
+import { guardCapacity, limitBody, httpStatusForLimit } from "../../shared/enforce.ts";
 
 // Public, anonymous form capture. No auth. Resolves the funnel from its
 // immutable public_id + a client-supplied published_version_id binding, validates
@@ -97,6 +98,25 @@ export default async function (req) {
     for (const f of fields) {
       if (f.required && !String(answers[f.name] ?? "").trim()) {
         return err(400, `${f.label || f.name} is required`);
+      }
+    }
+
+    // 4b. Contact capacity gate. A NEW address consumes stored-contact capacity;
+    // a returning address reuses its existing record (the approved grace policy)
+    // and is never blocked. Checked before any write is attempted.
+    const knownContact = firstRecord(
+      await sr.entities.Contact.filter({
+        workspace_id: funnel.workspace_id,
+        email_normalized: emailNorm,
+      })
+    );
+    if (!knownContact) {
+      const cap = await guardCapacity(sr, { workspaceId: funnel.workspace_id, metric: "contacts" });
+      if (!cap.allowed) {
+        return Response.json(limitBody(cap.report), {
+          status: httpStatusForLimit(cap.report),
+          headers: { "Content-Type": "application/json" },
+        });
       }
     }
 

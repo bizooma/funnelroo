@@ -5,6 +5,16 @@
 // image provider returns. Audience text is treated as data, never as
 // instructions that override the art-direction rules below.
 
+import { firstRecord, asArray, audienceContentHash } from "./auth.ts";
+import type { Row, ServiceRoleClient } from "./models.ts";
+import {
+  beginMeteredAction,
+  completeMeteredAction,
+  abortMeteredAction,
+  limitBody,
+  httpStatusForLimit,
+} from "./enforce.ts";
+
 const ALLOWED_HOSTS = ["media.base44.com", "static.wixstatic.com"];
 
 // Visual preferences are creative choices, separate from factual audience
@@ -132,4 +142,175 @@ export function publicRequestView(r: any) {
     error: r.error,
     created_date: r.created_date,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Generation orchestration — ONE path shared by the customer action and tests.
+// ---------------------------------------------------------------------------
+
+const STALE_PENDING_MS = 3 * 60 * 1000;
+
+export interface ImageProvider {
+  generate(prompt: string): Promise<{ url?: string }>;
+}
+
+/** Mock image provider for tests. Every call returns a UNIQUE url, so two
+ *  operations returning the SAME url is evidence that no second generation ran. */
+export function createMockImageProvider(): ImageProvider & { calls: number } {
+  const provider = {
+    calls: 0,
+    async generate(): Promise<{ url: string }> {
+      provider.calls += 1;
+      return { url: `https://media.base44.com/images/test/portrait_${crypto.randomUUID()}.png` };
+    },
+  };
+  return provider;
+}
+
+export interface PortraitAudience extends Row {
+  id: string;
+  workspace_id: string;
+  persona?: Row;
+}
+
+export interface VisualPreferences {
+  style: string;
+  background: string;
+  appearance: string;
+}
+
+export interface PortraitDeps {
+  sr: ServiceRoleClient;
+  workspaceId: string;
+  audience: PortraitAudience;
+  prefs: VisualPreferences;
+  userId: string;
+  /** Caller's logical operation identity. Required for retry-safe recovery. */
+  requestId?: string;
+  /** Override the provider (tests). Defaults to the Core GenerateImage integration. */
+  provider?: ImageProvider;
+}
+
+export interface PortraitOutcome {
+  ok: boolean;
+  status: number;
+  request?: Record<string, unknown>;
+  audience_revision?: string;
+  error?: string;
+  limit?: Record<string, unknown>;
+  generated?: boolean;
+}
+
+/**
+ * Generate (or recover) an illustrative portrait for an audience.
+ *
+ * Order of operations matters: capacity is reserved BEFORE the provider is
+ * called, and the reservation is tied to the caller's logical operation id. A
+ * retry with the same id recovers the recorded request (and therefore its
+ * image) without calling the provider again or consuming another unit.
+ */
+export async function generateAudiencePortrait(deps: PortraitDeps): Promise<PortraitOutcome> {
+  const sr = deps.sr;
+  const provider: ImageProvider =
+    deps.provider || { generate: (prompt) => sr.integrations.Core.GenerateImage({ prompt }) };
+  const revision = audienceContentHash(deps.audience);
+  const operationKey = deps.requestId ? `generatePersonaPortrait:${deps.requestId}` : undefined;
+
+  let decision;
+  try {
+    decision = await beginMeteredAction(sr, {
+      workspaceId: deps.workspaceId,
+      action: "generatePersonaPortrait",
+      metric: "image",
+      operationKey,
+      payload: { audience_id: deps.audience.id, visual_preferences: deps.prefs },
+    });
+  } catch (e) {
+    return { ok: false, status: 500, error: String((e as { message?: string })?.message || e) };
+  }
+  if (!decision.allowed) {
+    return { ok: false, status: httpStatusForLimit(decision.report!), limit: limitBody(decision.report!) };
+  }
+
+  const existing = await findExistingRequest(sr, deps);
+  if (existing) {
+    // Recovered: same tracked request, same image, no provider call, no new unit.
+    return {
+      ok: true,
+      status: 200,
+      request: publicRequestView(existing),
+      audience_revision: revision,
+      generated: false,
+    };
+  }
+
+  const prompt = buildPortraitPrompt(deps.audience, deps.prefs);
+  let request = await sr.entities.PersonaPortraitRequest.create({
+    workspace_id: deps.workspaceId,
+    audience_id: deps.audience.id,
+    request_id: deps.requestId || crypto.randomUUID(),
+    user_id: deps.userId,
+    source_audience_revision: revision,
+    visual_preferences: deps.prefs,
+    state: "pending",
+    prompt,
+  });
+  try {
+    const result = await provider.generate(prompt);
+    const url = result?.url;
+    if (!isValidGeneratedUrl(url)) throw new Error("Image provider returned an unusable result");
+    request = await sr.entities.PersonaPortraitRequest.update(request.id, {
+      state: "ready",
+      candidate_url: url,
+    });
+    await completeMeteredAction(sr, decision, deps.workspaceId);
+    return {
+      ok: true,
+      status: 200,
+      request: publicRequestView(request),
+      audience_revision: revision,
+      generated: true,
+    };
+  } catch (e) {
+    await sr.entities.PersonaPortraitRequest.update(request.id, {
+      state: "failed",
+      error: String((e as { message?: string })?.message || e).slice(0, 300),
+    });
+    await abortMeteredAction(sr, decision, deps.workspaceId);
+    return { ok: false, status: 502, error: "Portrait generation failed. Your current image was kept." };
+  }
+}
+
+// A request is "recoverable" when it belongs to the same logical operation
+// (caller-supplied request id) and is still pending or already ready. Otherwise
+// an in-flight request for the same audience is reused, as before.
+async function findExistingRequest(
+  sr: ServiceRoleClient,
+  deps: PortraitDeps
+): Promise<Row | undefined> {
+  if (deps.requestId) {
+    const byId = firstRecord<Row>(
+      (await sr.entities.PersonaPortraitRequest.filter({
+        workspace_id: deps.workspaceId,
+        audience_id: deps.audience.id,
+        request_id: deps.requestId,
+      })) as Row[]
+    );
+    if (byId && (byId.state === "pending" || byId.state === "ready")) return byId;
+  }
+  const pending = asArray<Row>(
+    (await sr.entities.PersonaPortraitRequest.filter(
+      { audience_id: deps.audience.id, state: "pending" },
+      { sort: "-created_date", limit: 1 }
+    )) as Row[]
+  );
+  if (!pending[0]) return undefined;
+  if (Date.now() - new Date(pending[0].created_date).getTime() > STALE_PENDING_MS) {
+    await sr.entities.PersonaPortraitRequest.update(pending[0].id, {
+      state: "failed",
+      error: "Timed out",
+    });
+    return undefined;
+  }
+  return pending[0];
 }

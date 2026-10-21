@@ -9,6 +9,14 @@ import {
   HttpError,
   generatePublicId,
 } from "../../shared/auth.ts";
+import { guardCapacity, limitBody, httpStatusForLimit } from "../../shared/enforce.ts";
+
+function limitBlocked(report) {
+  return Response.json(limitBody(report), {
+    status: httpStatusForLimit(report),
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 function slugify(text) {
   return String(text || "")
@@ -274,6 +282,12 @@ export default async function (req) {
         await sr.entities.FunnelDraft.filter({ funnel_id: funnel.id })
       );
       if (!draft) return err(400, "Nothing to publish — save a draft first");
+      // A funnel that is not already live consumes one live-funnel slot.
+      // Republishing an already-live funnel does not consume another.
+      if (funnel.state !== "published") {
+        const cap = await guardCapacity(sr, { workspaceId, metric: "live_funnels" });
+        if (!cap.allowed) return limitBlocked(cap.report);
+      }
       const checks = draft.publishing_checks || {};
       const blocks = draft.page_blocks || [];
       const hasForm = blocks.some((b) => b.type === "form");
@@ -469,6 +483,12 @@ export default async function (req) {
       };
       if (!allowed[from]?.includes(newState)) {
         return err(400, `Cannot transition from ${from} to ${newState}`);
+      }
+      // Resuming (paused → published) takes a live-funnel slot, exactly as
+      // publishing does. Re-selecting the current state does not.
+      if (newState === "published" && from !== "published") {
+        const cap = await guardCapacity(sr, { workspaceId, metric: "live_funnels" });
+        if (!cap.allowed) return limitBlocked(cap.report);
       }
       const funnelUpdated = await sr.entities.Funnel.update(funnel.id, { state: newState });
       return ok({ funnel: funnelUpdated });

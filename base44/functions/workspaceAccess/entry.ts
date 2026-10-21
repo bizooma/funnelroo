@@ -8,6 +8,7 @@ import {
   err,
   HttpError,
 } from "../../shared/auth.ts";
+import { guardCapacity, limitBody, httpStatusForLimit } from "../../shared/enforce.ts";
 
 function slugify(text) {
   return String(text || "")
@@ -102,6 +103,15 @@ export default async function (req) {
       ]);
       const email = String(body.email || "").trim().toLowerCase();
       if (!email) return err(400, "Email is required");
+      // An invitation reserves a team seat. Active members plus unexpired pending
+      // invitations count against the plan's seat allowance.
+      const seat = await guardCapacity(sr, { workspaceId: body.workspace_id, metric: "team_users" });
+      if (!seat.allowed) {
+        return Response.json(limitBody(seat.report), {
+          status: httpStatusForLimit(seat.report),
+          headers: { "Content-Type": "application/json" },
+        });
+      }
       const role = body.role === "admin" ? "admin" : "member";
       const token = crypto.randomUUID();
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();

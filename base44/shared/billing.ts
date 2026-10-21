@@ -6,20 +6,26 @@
 // Stripe tells us whether a payment instrument is active; these states tell
 // us what FunnelRoo access the workspace has.
 
+import type { Iso, WorkspaceBillingRecord } from "./models.ts";
 import { TRIAL } from "./plans.ts";
 
 export const ACCESS_STATES = {
-  NONE: "none", // no billing record yet
+  NONE: "none",
   TRIAL: "trial",
   PAID: "paid",
   PAYMENT_GRACE: "payment_grace",
   READ_ONLY: "read_only",
   LEGACY_ACCESS: "legacy_access",
-};
+} as const;
+
+export type AccessState = (typeof ACCESS_STATES)[keyof typeof ACCESS_STATES];
 
 // Compute the effective access state from a WorkspaceBilling record and now.
 // Does NOT mutate; callers persist transitions explicitly.
-export function computeAccessState(billing, nowMs) {
+export function computeAccessState(
+  billing: WorkspaceBillingRecord | null | undefined,
+  nowMs?: number
+): AccessState {
   if (!billing) return ACCESS_STATES.NONE;
   if (billing.legacy_access) return ACCESS_STATES.LEGACY_ACCESS;
   const now = nowMs || Date.now();
@@ -30,7 +36,6 @@ export function computeAccessState(billing, nowMs) {
   if (billing.status === "paid") {
     const through = billing.paid_through ? new Date(billing.paid_through).getTime() : 0;
     if (through > now) return ACCESS_STATES.PAID;
-    // Past paid-through with no renewal: grace until reconciliation resolves it.
     return ACCESS_STATES.PAYMENT_GRACE;
   }
   if (billing.status === "payment_grace") return ACCESS_STATES.PAYMENT_GRACE;
@@ -42,23 +47,28 @@ export function computeAccessState(billing, nowMs) {
   return ACCESS_STATES.READ_ONLY;
 }
 
-export function trialEndDate(startedAtIso, durationDays) {
+export function trialEndDate(startedAtIso?: Iso | null, durationDays?: number): Iso {
   const start = new Date(startedAtIso || new Date().toISOString());
   const end = new Date(start.getTime() + (durationDays || TRIAL.duration_days) * 86400000);
   return end.toISOString();
 }
 
-export function daysRemaining(endIso) {
+export function daysRemaining(endIso?: Iso | null): number {
   if (!endIso) return 0;
   const ms = new Date(endIso).getTime() - Date.now();
   return Math.max(0, Math.ceil(ms / 86400000));
+}
+
+export interface PeriodWindow {
+  start: Iso;
+  end: Iso;
 }
 
 // Paid usage window: monthly reset anchored to the first paid period start.
 // Half-open [start, start+1month), anchored to the original UTC day across
 // short months and leap years. Annual billing does NOT grant 12 months
 // upfront — the window is still one month.
-export function currentMonthlyWindow(anchorIso, nowMs) {
+export function currentMonthlyWindow(anchorIso?: Iso | null, nowMs?: number): PeriodWindow {
   const now = new Date(nowMs || Date.now());
   const anchor = new Date(anchorIso || now.toISOString());
   const anchorDay = anchor.getUTCDate();
@@ -73,7 +83,10 @@ export function currentMonthlyWindow(anchorIso, nowMs) {
 // The usage window for a metric given the billing record. Trial uses the trial
 // period [trial_started_at, trial_ends_at]; paid uses the monthly anniversary;
 // none/legacy returns null (no enforced window yet).
-export function usageWindowFor(billing, metric) {
+export function usageWindowFor(
+  billing: WorkspaceBillingRecord | null | undefined,
+  _metric: string
+): PeriodWindow | null {
   if (!billing) return null;
   if (billing.status === "trial" && billing.trial_started_at && billing.trial_ends_at) {
     return { start: billing.trial_started_at, end: billing.trial_ends_at };
@@ -82,16 +95,4 @@ export function usageWindowFor(billing, metric) {
     return currentMonthlyWindow(billing.paid_window_anchor);
   }
   return null;
-}
-
-// Whether a given access state permits new gated (metered/paid) operations.
-// Legacy access and none are NOT automatically entitled to new paid work in
-// the enforcement phase; this returns true only for active trial/paid/grace.
-export function canPerformGatedAction(accessState) {
-  return (
-    accessState === ACCESS_STATES.TRIAL ||
-    accessState === ACCESS_STATES.PAID ||
-    accessState === ACCESS_STATES.PAYMENT_GRACE ||
-    accessState === ACCESS_STATES.LEGACY_ACCESS
-  );
 }

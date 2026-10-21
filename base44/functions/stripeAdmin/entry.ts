@@ -13,6 +13,9 @@ import {
   getStripeClient,
   isStripeConfigured,
   StripeConfigError,
+  verifyStripeCredential,
+  stripeRequestApiVersion,
+  STRIPE_SDK_VERSION,
 } from "../../shared/stripeClient.ts";
 import {
   PRICE_LOOKUP,
@@ -25,6 +28,7 @@ import {
 import { PLANS } from "../../shared/plans.ts";
 import { runSyncFixtures, runPriceFixtures } from "../../shared/stripeMock.ts";
 import { reserveUsage, consumeUsage, releaseUsage, provisionWindows } from "../../shared/usage.ts";
+import { runRetryScenarios } from "../../shared/billingScenarios.ts";
 
 // Billing administration for the platform operator (app owner):
 //  - provisionCatalog: create/reuse the two Products and four recurring Prices,
@@ -46,6 +50,39 @@ export default async function (req) {
     const user = await requireUser(base44);
     if (!isPlatformOperator(user)) return err(403, "Platform operator access required");
     const action = body.action;
+
+    // --- Validate the configured credential (read-only, non-mutating) ---
+    // Distinguishes a missing/placeholder value, an unsupported type, a rejected
+    // or expired key, a valid restricted key missing a permission, and a live key
+    // refused because this rollout is test-only. Never returns the key itself.
+    if (action === "verifyCredentials") {
+      const result = await verifyStripeCredential();
+      return ok({
+        ...result,
+        sdk_version: STRIPE_SDK_VERSION,
+        webhook_endpoint_path: "/functions/stripeWebhook",
+        webhook_api_version: result.api_version,
+        webhook_note:
+          "In the Stripe TEST dashboard, add the webhook destination for /functions/stripeWebhook and pin its API version to webhook_api_version so delivered events match the handler's payload shape.",
+      });
+    }
+
+    // --- At-capacity retry scenarios (designated test workspace only) ---
+    if (action === "retryScenarios") {
+      const wsId = String(body.test_workspace_id || "").trim();
+      if (!wsId) return err(400, "test_workspace_id is required");
+      const existing = firstRecord(
+        await sr.entities.WorkspaceBilling.filter({ workspace_id: wsId, environment: ENVIRONMENT })
+      );
+      if (!existing || existing.enforcement_enabled !== true) {
+        return err(
+          403,
+          "The retry scenarios run only on a workspace already designated for enforcement."
+        );
+      }
+      const report = await runRetryScenarios(sr, { workspaceId: wsId, userId: user.id });
+      return ok(report);
+    }
 
     // --- Provision / validate the Stripe catalog ---
     if (action === "provisionCatalog" || action === "validateCatalog") {
