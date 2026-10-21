@@ -7,16 +7,11 @@ import {
   StripeConfigError,
 } from "../../shared/stripeClient.ts";
 import { ENVIRONMENT } from "../../shared/stripeCatalog.ts";
+import { billingSettingsUrl, customerOrigin } from "../../shared/appOrigins.ts";
 
 // Owner-only Stripe Customer Portal. Lets the owner manage payment method,
 // view invoices, change plan, and cancel — all on Stripe's hosted page.
 // Fail-closed with no valid test key.
-
-const ALLOWED_ORIGINS = [
-  "https://funnel-roo-flow.base44.app",
-  "https://funnelroo.com",
-  "https://www.funnelroo.com",
-];
 
 export default async function (req) {
   try {
@@ -41,10 +36,11 @@ export default async function (req) {
     }
 
     const stripe = getStripeClient();
-    const origin = ALLOWED_ORIGINS.includes(body.origin) ? body.origin : ALLOWED_ORIGINS[0];
+    // Canonical customer-facing destination: the configured site, never a
+    // backend function host and never an unvalidated browser value.
     const portal = await stripe.billingPortal.sessions.create({
       customer: billing.stripe_customer_id,
-      return_url: `${origin}/settings?tab=billing`,
+      return_url: billingSettingsUrl(customerOrigin(body.origin)),
     });
     return ok({ url: portal.url });
   } catch (e) {

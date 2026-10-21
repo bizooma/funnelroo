@@ -33,7 +33,7 @@ import AcceptInvite from '@/pages/AcceptInvite';
 import Unsubscribe from '@/pages/Unsubscribe';
 import Marketing from '@/pages/Marketing';
 import Pricing from '@/pages/Pricing';
-import CheckoutReturn from '@/pages/CheckoutReturn';
+import BillingReturnGate from '@/components/billing/BillingReturnGate';
 import { LoginRedirect } from '@/components/ProtectedRoute';
 
 function App() {
@@ -46,6 +46,10 @@ function App() {
             {/* Public routes — no auth required */}
             <Route path="/" element={<Marketing />} />
             <Route path="/pricing" element={<Pricing />} />
+            {/* Public by design: the gate itself waits for the auth check and
+                explains an expired session before sending anyone to login. The
+                backend still verifies the session and workspace membership. */}
+            <Route path="/billing/return" element={<BillingReturnGate />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -58,7 +62,6 @@ function App() {
             {/* Protected routes — require authentication */}
             <Route element={<ProtectedRoute unauthenticatedElement={<LoginRedirect />} />}>
               <Route path="/dev/persona-export" element={<PersonaExportPreview />} />
-              <Route path="/billing/return" element={<CheckoutReturn />} />
               <Route element={<WorkspaceProvider><Outlet /></WorkspaceProvider>}>
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route element={<WorkspaceGuard />}>

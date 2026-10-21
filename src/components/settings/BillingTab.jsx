@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/use-toast";
 import { Loader2, Sparkles, Rocket, AlertTriangle, ExternalLink, CreditCard } from "lucide-react";
+import { checkoutOrigin } from "@/lib/appOrigins";
 
 // Settings → Billing tab. Shows plan, trial, and usage meters. Owners get real
 // hosted Checkout, Stripe Customer Portal, and cancellation. Fail-closed: if
@@ -65,10 +66,25 @@ export default function BillingTab() {
         workspace_id: current.id,
         plan: planId,
         interval,
-        origin: window.location.origin,
+        origin: checkoutOrigin(),
       });
-      if (res.data?.url) window.location.href = res.data.url;
-      else reportError({ message: "Checkout could not be started." }, "Checkout failed");
+      if (res.data?.url) {
+        window.location.href = res.data.url;
+        return;
+      }
+      // Duplicate-purchase prevention: the workspace already has a live
+      // subscription (including a purchase completed without returning here).
+      // Point at the portal instead of opening a second subscription.
+      if (res.data?.already_active) {
+        toast({
+          title: "You're already subscribed",
+          description:
+            "This workspace has an active subscription. Change or cancel your plan in the billing portal.",
+        });
+        await load();
+        return;
+      }
+      reportError({ message: "Checkout could not be started." }, "Checkout failed");
     } catch (e) {
       reportError(e, "Checkout failed");
     } finally {
@@ -82,7 +98,7 @@ export default function BillingTab() {
     try {
       const res = await base44.functions.invoke("stripePortal", {
         workspace_id: current.id,
-        origin: window.location.origin,
+        origin: checkoutOrigin(),
       });
       if (res.data?.url) window.location.href = res.data.url;
       else reportError({ message: "Billing management could not be opened." }, "Portal failed");
