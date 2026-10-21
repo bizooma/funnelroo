@@ -1,7 +1,6 @@
 import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
-import { WorkspaceProvider } from "@/lib/workspaceContext";
 import { Button } from "@/components/ui/button";
 import { Loader2, LockKeyhole } from "lucide-react";
 import CheckoutReturn from "@/pages/CheckoutReturn";
@@ -54,11 +53,9 @@ export default function BillingReturnGate() {
     );
   }
 
-  return (
-    <WorkspaceProvider>
-      <CheckoutReturn />
-    </WorkspaceProvider>
-  );
+  // WorkspaceProvider is mounted by the route (src/App.jsx), so the confirmation
+  // has workspace context without this gate having to own the provider.
+  return <CheckoutReturn />;
 }
 
 function Shell({ children }) {

@@ -48,8 +48,18 @@ function App() {
             <Route path="/pricing" element={<Pricing />} />
             {/* Public by design: the gate itself waits for the auth check and
                 explains an expired session before sending anyone to login. The
-                backend still verifies the session and workspace membership. */}
-            <Route path="/billing/return" element={<BillingReturnGate />} />
+                workspace context is mounted at the route so every branch the
+                gate renders — loading, sign-in prompt, or confirmation — sits
+                inside WorkspaceProvider. The backend still verifies the Checkout
+                Session and the caller's membership of that workspace. */}
+            <Route
+              path="/billing/return"
+              element={
+                <WorkspaceProvider>
+                  <BillingReturnGate />
+                </WorkspaceProvider>
+              }
+            />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
