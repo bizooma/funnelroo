@@ -22,6 +22,7 @@ export default function CheckoutReturn() {
   const [attempt, setAttempt] = useState(0);
   const sessionId = new URLSearchParams(window.location.search).get("session_id");
   const timer = useRef(null);
+  const started = useRef(false);
 
   // Select the workspace the purchase actually belongs to, even if another
   // workspace was last selected in this browser.
@@ -64,7 +65,11 @@ export default function CheckoutReturn() {
     }
   }, [sessionId, selectWorkspace]);
 
+  // Verify once on arrival. Selecting the verified workspace changes context
+  // identity, so this must not re-run on that change.
   useEffect(() => {
+    if (started.current) return;
+    started.current = true;
     verify();
   }, [verify]);
 
@@ -134,10 +139,7 @@ export default function CheckoutReturn() {
             )}
             <div className="mt-5 flex flex-col gap-2">
               {attempt >= MAX_AUTO_RECHECKS && (
-                <Button onClick={retry}>
-                  <Loader2 className={`w-4 h-4 mr-1.5 ${state === "verifying" ? "animate-spin" : "hidden"}`} />
-                  Check again
-                </Button>
+                <Button onClick={retry}>Check again</Button>
               )}
               <Button asChild variant="outline">
                 <Link to="/settings?tab=billing">Go to billing</Link>

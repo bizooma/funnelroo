@@ -29,6 +29,13 @@ import { PLANS } from "../../shared/plans.ts";
 import { runSyncFixtures, runPriceFixtures } from "../../shared/stripeMock.ts";
 import { reserveUsage, consumeUsage, releaseUsage, provisionWindows } from "../../shared/usage.ts";
 import { runRetryScenarios } from "../../shared/billingScenarios.ts";
+import {
+  canonicalOrigin,
+  previewOrigins,
+  customerOrigin,
+  billingReturnUrl,
+  billingSettingsUrl,
+} from "../../shared/appOrigins.ts";
 
 // Billing administration for the platform operator (app owner):
 //  - provisionCatalog: create/reuse the two Products and four recurring Prices,
@@ -64,6 +71,30 @@ export default async function (req) {
         webhook_api_version: result.api_version,
         webhook_note:
           "In the Stripe TEST dashboard, add the webhook destination for /functions/stripeWebhook and pin its API version to webhook_api_version so delivered events match the handler's payload shape.",
+      });
+    }
+
+    // --- Report the customer-facing origins and the URLs we build (read-only) ---
+    // Confirms the configured canonical site and that no input — missing, a
+    // backend-host alias, www, or an arbitrary value — resolves anywhere else.
+    if (action === "returnUrls") {
+      const samples = [
+        { requested: "missing", value: undefined },
+        { requested: "canonical", value: canonicalOrigin() },
+        { requested: "backend_host_alias", value: "https://funnel-roo-flow.base44.app" },
+        { requested: "www_alias", value: "https://www.funnelroo.com" },
+        { requested: "arbitrary", value: "https://evil.example.com" },
+      ];
+      return ok({
+        canonical_origin: canonicalOrigin(),
+        preview_origins: previewOrigins(),
+        checkout_destinations: samples.map((s) => ({
+          requested: s.requested,
+          resolved_origin: customerOrigin(s.value),
+          success_url: billingReturnUrl(s.value),
+          cancel_url: billingSettingsUrl(s.value),
+        })),
+        portal_return_url: billingSettingsUrl(undefined),
       });
     }
 
