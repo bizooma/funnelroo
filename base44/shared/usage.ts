@@ -5,7 +5,7 @@ import type {
   UsageWindowRecord,
   WorkspaceBillingRecord,
 } from "./models.ts";
-import { firstRecord, asArray } from "./auth.ts";
+import { firstRecord, asArray, HttpError } from "./auth.ts";
 import { usageWindowFor, type PeriodWindow } from "./billing.ts";
 import {
   enforcementEnabled,
@@ -53,7 +53,8 @@ export type ReserveReason =
   | "access_blocked"
   | "no_usage_window"
   | "limit_reached"
-  | "operation_conflict";
+  | "operation_conflict"
+  | "unavailable";
 
 export interface ReserveResult {
   allowed: boolean;
@@ -117,8 +118,15 @@ async function resolveWindow(
   workspaceId: string,
   windowKey: string,
   window: PeriodWindow,
-  allowance: number | null
+  allowance: number | null,
+  depth = 0
 ): Promise<UsageWindowRecord> {
+  // Each recursion removes at least one competing row, so this cannot spin.
+  // Failing closed is far safer than reserving against a window we could not
+  // reconcile.
+  if (depth > 3) {
+    throw new HttpError(503, "Usage window could not be reconciled safely");
+  }
   const rows = asArray<UsageWindowRecord>(
     (await sr.entities.UsageWindow.filter(
       { workspace_id: workspaceId, metric: windowKey, window_start: window.start },
@@ -127,7 +135,7 @@ async function resolveWindow(
   );
 
   if (!rows.length) {
-    return await sr.entities.UsageWindow.create({
+    await sr.entities.UsageWindow.create({
       workspace_id: workspaceId,
       metric: windowKey,
       window_start: window.start,
@@ -136,24 +144,49 @@ async function resolveWindow(
       used: 0,
       reserved: 0,
     });
+    // Re-read so every concurrent first-use caller converges on the SAME row.
+    // Returning the row we just created would let N racing callers each reserve
+    // against their OWN row, splitting the counters across N records and
+    // admitting N x the allowance against a single allowance.
+    return await resolveWindow(sr, workspaceId, windowKey, window, allowance, depth + 1);
   }
 
   const survivor = rows[0];
   if (rows.length > 1) {
-    // Concurrent first use created duplicate rows. Merge their counters into the
-    // oldest survivor and delete the rest so the counters can never be split.
-    let used = survivor.used || 0;
-    let reserved = survivor.reserved || 0;
+    // Concurrent first use created duplicate rows. Fold each duplicate's counters
+    // into the oldest survivor with an ATOMIC increment — never a blind $set of
+    // summed values, which could drop a reservation made in the meantime — then
+    // delete the duplicate so the counters can never be split across records.
     for (let i = 1; i < rows.length; i++) {
-      used += rows[i].used || 0;
-      reserved += rows[i].reserved || 0;
+      const dup = rows[i];
+      const dupUsed = dup.used || 0;
+      const dupReserved = dup.reserved || 0;
+      if (dupUsed || dupReserved) {
+        try {
+          await sr.entities.UsageWindow.updateMany(
+            { id: survivor.id },
+            { $inc: { used: dupUsed, reserved: dupReserved } }
+          );
+        } catch {
+          // Survivor vanished; the duplicate is still removed below.
+        }
+      }
       try {
-        await sr.entities.UsageWindow.delete(rows[i].id);
+        await sr.entities.UsageWindow.delete(dup.id);
       } catch {
         // Already removed by another resolver.
       }
     }
-    return await sr.entities.UsageWindow.update(survivor.id, { used, reserved, allowance });
+    const merged = firstRecord<UsageWindowRecord>(
+      (await sr.entities.UsageWindow.filter({ id: survivor.id })) as UsageWindowRecord[]
+    );
+    if (merged) {
+      if (merged.allowance !== allowance) {
+        return await sr.entities.UsageWindow.update(merged.id, { allowance });
+      }
+      return merged;
+    }
+    return await resolveWindow(sr, workspaceId, windowKey, window, allowance, depth + 1);
   }
 
   if (survivor.allowance !== allowance) {
@@ -219,81 +252,169 @@ export async function reserveUsage(
   const window = usageWindowFor(billing, cfg.windowKey);
   if (!window) return { allowed: false, reason: "no_usage_window" };
 
-  const prior = firstRecord<UsageOperationRecord>(
-    (await sr.entities.UsageOperation.filter({
+  // --- Identity resolution ------------------------------------------------
+  // Exactly one operation row must exist per operation key. A read straight after
+  // a write can miss the row just created, and a concurrent first attempt can
+  // create its own, so we create when absent, re-read, and consolidate down to
+  // the OLDEST row. Duplicates never own a charge, so removing them is lossless —
+  // and no counter is touched until after this convergence.
+  let identity = await loadOperation(sr, args);
+  if (!identity) {
+    const created = await sr.entities.UsageOperation.create({
       workspace_id: args.workspaceId,
       operation_key: args.operationKey,
-    })) as UsageOperationRecord[]
-  );
+      metric: args.metric,
+      units,
+      state: "reserved",
+      window_id: "",
+      source_ref: args.sourceRef || "",
+      payload_fingerprint: args.payloadFingerprint || "",
+    });
+    const rows = asArray<UsageOperationRecord>(
+      (await sr.entities.UsageOperation.filter(
+        { workspace_id: args.workspaceId, operation_key: args.operationKey },
+        { sort: "created_date" }
+      )) as UsageOperationRecord[]
+    );
+    identity = rows[0] || created;
+    for (let i = 1; i < rows.length; i++) {
+      const dup = rows[i];
+      if (dup.state === "reserved" && dup.window_id) {
+        // A duplicate that somehow already owns a charge gives the unit back
+        // before removal, so the identity holds exactly one reservation.
+        try {
+          await sr.entities.UsageWindow.updateMany(
+            { id: dup.window_id },
+            { $inc: { reserved: -(dup.units || units) } }
+          );
+        } catch {
+          // Window already gone.
+        }
+      }
+      try {
+        await sr.entities.UsageOperation.delete(dup.id);
+      } catch {
+        // Already removed by a concurrent resolver.
+      }
+    }
+  }
+
   // The same logical operation with a different payload is a conflict, whatever
   // state that operation is currently in.
   if (
-    prior &&
-    prior.payload_fingerprint &&
+    identity.payload_fingerprint &&
     args.payloadFingerprint &&
-    prior.payload_fingerprint !== args.payloadFingerprint
+    identity.payload_fingerprint !== args.payloadFingerprint
   ) {
-    return { allowed: false, reason: "operation_conflict", operation_id: prior.id };
+    return { allowed: false, reason: "operation_conflict", operation_id: identity.id };
   }
-  if (prior && (prior.state === "reserved" || prior.state === "consumed")) {
-    // A retried operation recovers its ORIGINAL reservation. Even after a period
-    // rollover it stays tied to the window it was created in and never spends the
-    // new period's allowance.
+  if (!identity.payload_fingerprint && args.payloadFingerprint) {
+    // Recorded before payloads were fingerprinted; the two cannot be compared
+    // retroactively, so adopt this fingerprint and hold the identity to it.
+    try {
+      await sr.entities.UsageOperation.update(identity.id, {
+        payload_fingerprint: args.payloadFingerprint,
+      });
+    } catch {
+      // Non-fatal: the reservation itself is unaffected.
+    }
+  }
+
+  // Already charged by an earlier or concurrent attempt: recover that reservation.
+  // Even after a period rollover it stays tied to the window it was created in and
+  // never spends the new period's allowance.
+  if (identity.window_id && (identity.state === "reserved" || identity.state === "consumed")) {
     return {
       allowed: true,
       duplicate: true,
-      operation_id: prior.id,
-      window_id: prior.window_id || undefined,
-      state: prior.state,
+      operation_id: identity.id,
+      window_id: identity.window_id,
+      state: identity.state,
     };
   }
-  // prior in "released"/"failed": the earlier attempt gave its unit back, so this
-  // retry re-reserves the SAME identity row rather than adding a duplicate key.
+  // An uncharged row (state "released"/"failed", or created moments ago) falls
+  // through and claims its charge below, so a retry can never double-charge.
 
   const allowance = windowedAllowance(billing, cfg.windowKey);
   if (allowance == null) return { allowed: true, unenforced: true };
 
-  const w = await resolveWindow(sr, args.workspaceId, cfg.windowKey, window, allowance);
+  let target = await resolveWindow(sr, args.workspaceId, cfg.windowKey, window, allowance);
 
-  // Atomic conditional increment — the concurrency primitive. Capacity is
-  // validated after it and an over-admission releases immediately.
-  await sr.entities.UsageWindow.updateMany({ id: w.id }, { $inc: { reserved: units } });
-  const after = await sr.entities.UsageWindow.get(w.id);
-  const committed = (after.used || 0) + (after.reserved || 0);
+  // Claim the charge. Only the caller that moves the identity from "uncharged"
+  // (empty window_id) to a window performs the increment, so one identity can be
+  // charged exactly once even when two attempts race.
+  const claim = await sr.entities.UsageOperation.updateMany(
+    { id: identity.id, window_id: "" },
+    {
+      $set: {
+        metric: args.metric,
+        units,
+        state: "reserved",
+        window_id: target.id,
+        source_ref: args.sourceRef || "",
+        payload_fingerprint: args.payloadFingerprint || "",
+      },
+    }
+  );
+  if (!claim.updated) {
+    const again = await loadOperation(sr, args);
+    if (again && again.window_id) {
+      return {
+        allowed: true,
+        duplicate: true,
+        operation_id: again.id,
+        window_id: again.window_id,
+        state: again.state,
+      };
+    }
+    // Claimed but not yet chargeable — retry rather than guess.
+    return { allowed: false, reason: "unavailable" };
+  }
+
+  // Atomic conditional increment on the resolved window. A concurrent first use
+  // can fold that row into the surviving row — single-datastore read lag makes
+  // this reachable — so move the charge to the survivor and retry once rather
+  // than leaving a racing caller without a decision.
+  let charged: UsageWindowRecord | null = null;
+  for (let attempt = 0; attempt < 2 && !charged; attempt++) {
+    await sr.entities.UsageWindow.updateMany({ id: target.id }, { $inc: { reserved: units } });
+    try {
+      charged = await sr.entities.UsageWindow.get(target.id);
+    } catch {
+      target = await resolveWindow(sr, args.workspaceId, cfg.windowKey, window, allowance);
+      await sr.entities.UsageOperation.updateMany(
+        { id: identity.id },
+        { $set: { window_id: target.id } }
+      );
+    }
+  }
+  if (!charged) {
+    await sr.entities.UsageOperation.updateMany(
+      { id: identity.id },
+      { $set: { window_id: "", state: "released" } }
+    );
+    return { allowed: false, reason: "unavailable" };
+  }
+
+  const committed = (charged.used || 0) + (charged.reserved || 0);
   if (committed > allowance) {
-    await sr.entities.UsageWindow.updateMany({ id: w.id }, { $inc: { reserved: -units } });
+    await sr.entities.UsageWindow.updateMany({ id: target.id }, { $inc: { reserved: -units } });
+    // Release the charge claim so this identity can be reserved later, once
+    // capacity has been freed. Counters stay consistent either way.
+    await sr.entities.UsageOperation.updateMany(
+      { id: identity.id },
+      { $set: { window_id: "", state: "released" } }
+    );
     return {
       allowed: false,
       reason: "limit_reached",
-      used: after.used || 0,
+      used: charged.used || 0,
       allowance,
-      remaining: Math.max(0, allowance - (after.used || 0)),
+      remaining: Math.max(0, allowance - (charged.used || 0)),
     };
   }
 
-  if (prior) {
-    const reused = await sr.entities.UsageOperation.update(prior.id, {
-      metric: args.metric,
-      units,
-      state: "reserved",
-      window_id: w.id,
-      source_ref: args.sourceRef || "",
-      payload_fingerprint: args.payloadFingerprint || "",
-    });
-    return { allowed: true, operation_id: reused.id, window_id: w.id, allowance };
-  }
-
-  const op = await sr.entities.UsageOperation.create({
-    workspace_id: args.workspaceId,
-    operation_key: args.operationKey,
-    metric: args.metric,
-    units,
-    state: "reserved",
-    window_id: w.id,
-    source_ref: args.sourceRef || "",
-    payload_fingerprint: args.payloadFingerprint || "",
-  });
-  return { allowed: true, operation_id: op.id, window_id: w.id, allowance };
+  return { allowed: true, operation_id: identity.id, window_id: target.id, allowance };
 }
 
 // Promote a reservation to a consumed unit. Idempotent: only the first consumer

@@ -2,14 +2,13 @@ import { createClientFromRequest } from "npm:@base44/sdk@0.8.52";
 import { ok, err, isPlatformOperator } from "../../shared/auth.ts";
 import { dispatchDueMessages, isProviderConfigured } from "../../shared/nurture.ts";
 
-// Scheduled dispatch entry point. Called by the NurtureDispatch workflow
-// every 5 minutes. No user auth — this is a platform-scheduled maintenance
-// task that processes due nurture messages across all workspaces.
+// Scheduled dispatch entry point. Called by the NurtureDispatch workflow every
+// 5 minutes to process due nurture messages across all workspaces.
 //
-// Safety: the function only sends due queued messages that pass all
-// eligibility rechecks. It does not expose sensitive data, enroll contacts,
-// or modify consent. Calling it externally only processes the queue (same
-// as the scheduler would).
+// Authorization: the platform invokes this step AS the workflow's creator, an app
+// admin. The URL is public, so this gate is what prevents an anonymous visitor
+// from triggering a cross-workspace send. A rejected call never reaches the
+// provider.
 export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
@@ -18,20 +17,22 @@ export default async function (req) {
     const origin = (() => {
       try { return new URL(req.url).origin; } catch { return ""; }
     })();
-    // mock=true forces the mock provider (for tests). The explicit mock is a test
-    // affordance: only the platform operator may force it. Everyone else gets the
-    // real provider when it is configured (and the mock only as the fallback when
-    // no provider exists at all).
-    let operatorForcedMock = false;
-    if (body.mock === true) {
-      try {
-        const user = await base44.auth.me();
-        operatorForcedMock = isPlatformOperator(user);
-      } catch {
-        operatorForcedMock = false;
-      }
+    // Trusted scheduler identity — see the note above. Reject anonymous and
+    // customer-session callers before any queue work happens.
+    let user = null;
+    try {
+      user = await base44.auth.me();
+    } catch {
+      user = null;
     }
-    const mock = operatorForcedMock || !isProviderConfigured();
+    if (!user) return err(401, "Authentication required.");
+    if (!isPlatformOperator(user)) {
+      return err(403, "Nurture dispatch is restricted to the platform operator.");
+    }
+
+    // The caller is now a verified operator, so an explicit mock request is
+    // honoured; otherwise the real provider is used whenever it is configured.
+    const mock = body.mock === true || !isProviderConfigured();
     const result = await dispatchDueMessages(sr, origin, { mock, batch: body.batch });
     return ok(result);
   } catch (e) {

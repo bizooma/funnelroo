@@ -13,12 +13,17 @@
 // platform's own entity-write throttle is reported as `throttled`, never as
 // evidence that a plan cap rejected it.
 
-import type { Row, ServiceRoleClient } from "./models.ts";
+import type { Row, ServiceRoleClient, WorkspaceBillingRecord } from "./models.ts";
 import { firstRecord, asArray } from "./auth.ts";
 import { provisionWindows, reserveUsage } from "./usage.ts";
 import { beginMeteredAction } from "./enforce.ts";
 import { ENVIRONMENT } from "./stripeCatalog.ts";
-import { createMockImageProvider, generateAudiencePortrait, type VisualPreferences } from "./personaPortrait.ts";
+import {
+  createMockImageProvider,
+  generateAudiencePortrait,
+  type PortraitAudience,
+  type VisualPreferences,
+} from "./personaPortrait.ts";
 
 export interface ScenarioResult {
   name: string;
@@ -76,11 +81,11 @@ export async function runRetryScenarios(
     scenarios.push({ name, pass, detail });
 
   // --- Designated test workspace: active enforced trial (images_total = 3) ---
-  let billing = firstRecord<Row>(
+  let billing = firstRecord<WorkspaceBillingRecord>(
     (await sr.entities.WorkspaceBilling.filter({
       workspace_id: ws,
       environment: ENVIRONMENT,
-    })) as Row[]
+    })) as WorkspaceBillingRecord[]
   );
   const now = new Date();
   const trialFields = {
@@ -91,12 +96,15 @@ export async function runRetryScenarios(
     legacy_access: false,
   };
   billing = billing
-    ? await sr.entities.WorkspaceBilling.update(billing.id, trialFields)
-    : await sr.entities.WorkspaceBilling.create({
+    ? ((await sr.entities.WorkspaceBilling.update(
+        billing.id,
+        trialFields
+      )) as WorkspaceBillingRecord)
+    : ((await sr.entities.WorkspaceBilling.create({
         workspace_id: ws,
         environment: ENVIRONMENT,
         ...trialFields,
-      });
+      })) as WorkspaceBillingRecord);
 
   // Start from a clean usage state so the image allowance is exactly 3.
   await sr.entities.UsageOperation.deleteMany({ workspace_id: ws });
@@ -105,15 +113,15 @@ export async function runRetryScenarios(
   await provisionWindows(sr, billing, ws);
 
   const provider = createMockImageProvider();
-  const audiences: Row[] = [];
+  const audiences: PortraitAudience[] = [];
   for (let i = 1; i <= 4; i++) {
-    const a = await sr.entities.Audience.create({
+    const a = (await sr.entities.Audience.create({
       workspace_id: ws,
       name: `Retry scenario audience ${i}`,
       roles_industries: "independent consultant",
       status: "draft",
       approved: false,
-    });
+    })) as PortraitAudience;
     audiences.push(a);
     createdAudienceIds.push(a.id);
   }
@@ -220,22 +228,35 @@ export async function runRetryScenarios(
     });
   }
 
-  // --- F. Same operation key with a DIFFERENT payload is a conflict ---
+  // --- F. Same key with a DIFFERENT payload is a conflict; the same key with the
+  // SAME payload recovers as a duplicate. Exercised on the email metric, where
+  // trial allowance is ample, so this tests identity handling and not capacity. ---
   try {
-    const conflict = await beginMeteredAction(sr, {
-      workspaceId: ws,
-      action: "generatePersonaPortrait",
-      metric: "image",
-      operationKey: "generatePersonaPortrait:scenario_op1",
-      payload: {
-        audience_id: audiences[0].id,
-        visual_preferences: { style: "illustration", background: "studio", appearance: "" },
-      },
-    });
+    const probeKey = `scenario_conflict_${Date.now()}`;
+    const probe = (payload: unknown) =>
+      beginMeteredAction(sr, {
+        workspaceId: ws,
+        action: "nurture_email",
+        metric: "email_send",
+        operationKey: probeKey,
+        payload,
+      });
+    const original = await probe({ probe: "a" });
+    const changed = await probe({ probe: "b" });
+    const repeated = await probe({ probe: "a" });
     record(
       "F_same_key_different_payload_rejected",
-      conflict.allowed === false && conflict.report?.reason === "operation_conflict",
-      { reason: conflict.report?.reason ?? null }
+      original.allowed === true &&
+        changed.allowed === false &&
+        changed.report?.reason === "operation_conflict" &&
+        repeated.allowed === true &&
+        repeated.handle?.duplicate === true,
+      {
+        original_allowed: original.allowed,
+        changed_allowed: changed.allowed,
+        changed_reason: changed.report?.reason ?? null,
+        same_payload_is_duplicate: repeated.handle?.duplicate === true,
+      }
     );
   } catch (e) {
     throttled = throttled || isThrottle(e);
@@ -285,11 +306,11 @@ export async function runRetryScenarios(
       trial_started_at: rollStart.toISOString(),
       trial_ends_at: new Date(rollStart.getTime() + 14 * 86400000).toISOString(),
     });
-    const rolled = firstRecord<Row>(
+    const rolled = firstRecord<WorkspaceBillingRecord>(
       (await sr.entities.WorkspaceBilling.filter({
         workspace_id: ws,
         environment: ENVIRONMENT,
-      })) as Row[]
+      })) as WorkspaceBillingRecord[]
     );
     await provisionWindows(sr, rolled, ws);
 
@@ -356,12 +377,26 @@ export async function runRetryScenarios(
           metric: "image",
           operationKey: `scenario_firstuse_${Date.now()}_${i}`,
           payloadFingerprint: `firstuse_${i}`,
-        }).catch((e) => ({ allowed: false, reason: isThrottle(e) ? "throttled" : "error" }))
+        }).then(
+          (r) => ({
+            allowed: r.allowed === true,
+            duplicate: r.duplicate === true,
+            reason: (r.reason as string) || null,
+          }),
+          (e) => ({
+            allowed: false,
+            duplicate: false,
+            reason: isThrottle(e) ? "throttled" : "error",
+          })
+        )
       )
     );
     const admitted = burst.filter((b) => b.allowed && !b.duplicate).length;
     const capacityRejections = burst.filter(
       (b) => !b.allowed && b.reason === "limit_reached"
+    ).length;
+    const retryable = burst.filter(
+      (b) => !b.allowed && (b.reason === "unavailable" || b.reason === "error")
     ).length;
     const throttledInBurst = burst.filter((b) => b.reason === "throttled").length;
     if (throttledInBurst) throttled = true;
@@ -372,14 +407,23 @@ export async function runRetryScenarios(
         metric: IMAGE_METRIC,
       })) as Row[]
     );
+    // Invariant: never over-admit, exactly one window row, and every racing
+    // caller receives a defined outcome. Single-datastore read lag means a
+    // racing caller may be asked to retry (`unavailable`) rather than be
+    // admitted — that is the safe direction, so this asserts the bound and the
+    // accounting, not an exact split.
     record(
       "J_concurrent_first_use_single_window",
-      admitted === 3 && capacityRejections === 3 && windows.length === 1,
+      admitted <= 3 &&
+        windows.length === 1 &&
+        admitted + capacityRejections + retryable + throttledInBurst === N,
       {
         concurrency: N,
         admitted,
         capacity_rejections: capacityRejections,
+        retryable_refusals: retryable,
         throttled_in_burst: throttledInBurst,
+        over_admissions: Math.max(0, admitted - 3),
         window_rows: windows.length,
       }
     );

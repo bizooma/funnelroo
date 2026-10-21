@@ -40,15 +40,22 @@ export default async function (req) {
     const sr = base44.asServiceRole;
     const body = await req.json().catch(() => ({}));
 
-    // This is a scheduled function — verify it's called by the workflow system
-    const user = await base44.auth.me();
-    if (body.action === "verifyFixtures") {
-      if (user?.role !== "admin") return err(403, "Admin access required");
-      return ok(await runBookingFixtures(ingestCheckedAppointment));
+    // Trusted scheduler identity. The platform invokes this step AS the workflow's
+    // creator, an app admin, so that admin session is the credential — no
+    // caller-supplied flag is trusted or required. The URL is public, so this gate
+    // is what keeps anonymous and customer-session callers out.
+    let user = null;
+    try {
+      user = await base44.auth.me();
+    } catch {
+      user = null;
     }
-    const isSystem = user?.role === "admin" && (body._system === true || body._workflow === true);
-    if (!isSystem) {
-      return err(403, "Reconciliation must be triggered by the scheduled workflow");
+    if (!user) return err(401, "Authentication required.");
+    if (user.role !== "admin") {
+      return err(403, "Booking reconciliation is restricted to the platform operator.");
+    }
+    if (body.action === "verifyFixtures") {
+      return ok(await runBookingFixtures(ingestCheckedAppointment));
     }
 
     const results = [];

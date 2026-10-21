@@ -10,12 +10,12 @@ import { ENVIRONMENT } from "../../shared/stripeCatalog.ts";
 
 // Scheduled reconciliation, invoked by the BillingReconcile workflow.
 //
-// Authorization: the caller must be an authenticated platform operator AND the
-// invocation must originate from the workflow (body._workflow). A caller-
-// supplied flag ALONE is not sufficient — an anonymous or ordinary app-user
-// caller with _system:true is still rejected. Because sync derives all state
-// from Stripe (the source of truth), an unauthorized call could at worst cause
-// extra Stripe reads, never a fabricated grant.
+// Authorization: the platform invokes this step AS the workflow's creator, an app
+// admin, so that admin session is the scheduler's credential — no caller-supplied
+// flag and no shared secret is trusted or needed. The function URL is public, so
+// this gate is what keeps anonymous and customer-session callers out. Because
+// sync derives all state from Stripe (the source of truth), an unauthorized call
+// could at worst cause extra Stripe reads, never a fabricated grant.
 //
 // Work performed:
 //  1. Retry failed BillingEvents (recover unfinished work).
@@ -33,9 +33,9 @@ export default async function (req) {
     } catch {
       user = null;
     }
-    const isSystem = isPlatformOperator(user) && body._workflow === true;
-    if (!isSystem) {
-      return err(403, "Reconciliation must be triggered by the scheduled workflow from a platform operator.");
+    if (!user) return err(401, "Authentication required.");
+    if (!isPlatformOperator(user)) {
+      return err(403, "Reconciliation is restricted to the platform operator.");
     }
 
     if (!isStripeConfigured()) {
@@ -61,6 +61,14 @@ export default async function (req) {
         environment: ENVIRONMENT,
         stripe_subscription_id: { $exists: true },
       })
+    ).filter(
+      // "$exists" also matches a field explicitly stored as null or "", which are
+      // perfectly normal for a workspace that has never checked out. Retrieving a
+      // subscription with such a value is a hard Stripe argument error, so sync
+      // only the workspaces that genuinely carry a subscription.
+      (rec) =>
+        typeof rec.stripe_subscription_id === "string" &&
+        rec.stripe_subscription_id.length > 0
     );
 
     const results = [];

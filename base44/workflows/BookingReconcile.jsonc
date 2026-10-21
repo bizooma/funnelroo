@@ -31,10 +31,7 @@
           "call": "invoke_backend_function",
           "with": {
             "function_name": "bookingReconcile",
-            "payload": {
-              "_system": true,
-              "_workflow": true
-            }
+            "payload": {}
           },
           "then": "end",
           "x-base44": {
