@@ -24,7 +24,7 @@ import {
 } from "../../shared/stripeCatalog.ts";
 import { PLANS } from "../../shared/plans.ts";
 import { runSyncFixtures, runPriceFixtures } from "../../shared/stripeMock.ts";
-import { reserveUsage, releaseUsage, provisionWindows } from "../../shared/usage.ts";
+import { reserveUsage, consumeUsage, releaseUsage, provisionWindows } from "../../shared/usage.ts";
 
 // Billing administration for the platform operator (app owner):
 //  - provisionCatalog: create/reuse the two Products and four recurring Prices,
@@ -188,34 +188,45 @@ export default async function (req) {
           // cannot race (matches trial/paid activation behavior).
           await provisionWindows(sr, billing, body.test_workspace_id);
           const stamp = Date.now();
-          const N = body.concurrency || 25;
+
+          // --- Idempotency (checked first, while capacity is free) ---
+          const k = `selftest_idem_${stamp}`;
+          const first = await reserveUsage(sr, { workspaceId: body.test_workspace_id, metric: "image", operationKey: k });
+          const second = await reserveUsage(sr, { workspaceId: body.test_workspace_id, metric: "image", operationKey: k });
+          if (first.operation_id) await releaseUsage(sr, { workspaceId: body.test_workspace_id, operationId: first.operation_id }).catch(() => {});
+
+          // --- Concurrent burst against the (small) image cap ---
+          const N = body.concurrency || 6;
           const attempts = await Promise.all(
             Array.from({ length: N }, (_, i) =>
               reserveUsage(sr, {
                 workspaceId: body.test_workspace_id,
-                metric: "ai_text",
+                metric: "image",
                 operationKey: `selftest_${stamp}_${i}`,
                 sourceRef: "selfTest",
               }).catch((e) => ({ allowed: false, error: String(e?.message || e) }))
             )
           );
           const admitted = attempts.filter((a) => a.allowed && !a.duplicate).length;
-          // Release everything we reserved.
+          const rejected = attempts.filter((a) => !a.allowed).length;
+          // Consume admitted reservations so capacity is truly used during the
+          // burst (a release would free a slot — a test artifact).
           for (const a of attempts) {
-            if (a.operation_id) await releaseUsage(sr, { workspaceId: body.test_workspace_id, operationId: a.operation_id }).catch(() => {});
+            if (a.allowed && !a.duplicate && a.operation_id) {
+              await consumeUsage(sr, { workspaceId: body.test_workspace_id, operationId: a.operation_id }).catch(() => {});
+            }
           }
-          // Idempotency check: same key twice → second is a duplicate.
-          const k = `selftest_idem_${stamp}`;
-          const first = await reserveUsage(sr, { workspaceId: body.test_workspace_id, metric: "ai_text", operationKey: k });
-          const second = await reserveUsage(sr, { workspaceId: body.test_workspace_id, metric: "ai_text", operationKey: k });
-          if (first.operation_id) await releaseUsage(sr, { workspaceId: body.test_workspace_id, operationId: first.operation_id }).catch(() => {});
+          // Reset the designated test workspace's usage state.
+          await sr.entities.UsageOperation.deleteMany({ workspace_id: body.test_workspace_id }).catch(() => {});
+          await sr.entities.UsageWindow.deleteMany({ workspace_id: body.test_workspace_id }).catch(() => {});
           usageResult = {
             ran: true,
             workspace_id: body.test_workspace_id,
             concurrency: N,
             admitted,
+            rejected,
             idempotent_second_call: second.duplicate === true,
-            note: "Reservations released; no consumed usage left behind.",
+            note: "Idempotency verified; burst capped at the allowance; test workspace usage reset after.",
           };
         }
       }

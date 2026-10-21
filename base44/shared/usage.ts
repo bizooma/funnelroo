@@ -35,54 +35,33 @@ async function loadBilling(sr, workspaceId) {
   );
 }
 
-// Resolve the single window for (workspace, windowKey). Merges duplicates into
-// the oldest row and rolls the period over in place.
+// Resolve the window for (workspace, windowKey) at the CURRENT period. The
+// period is part of the identity, so rollover is implicit (a new period is a
+// new window_start) and there is no destructive reset in the hot path — a
+// concurrent burst can never wipe a counter another request just incremented.
 async function resolveWindow(sr, workspaceId, windowKey, window, allowance) {
   const rows = asArray(
     await sr.entities.UsageWindow.filter(
-      { workspace_id: workspaceId, metric: windowKey },
+      { workspace_id: workspaceId, metric: windowKey, window_start: window.start },
       { sort: "created_date" }
     )
   );
-  if (!rows.length) {
-    return await sr.entities.UsageWindow.create({
-      workspace_id: workspaceId,
-      metric: windowKey,
-      window_start: window.start,
-      window_end: window.end,
-      allowance,
-      used: 0,
-      reserved: 0,
-    });
-  }
-  let survivor = rows[0];
-  if (rows.length > 1) {
-    let extraUsed = 0;
-    let extraReserved = 0;
-    for (let i = 1; i < rows.length; i++) {
-      extraUsed += rows[i].used || 0;
-      extraReserved += rows[i].reserved || 0;
-      try {
-        await sr.entities.UsageWindow.delete(rows[i].id);
-      } catch {}
+  if (rows.length) {
+    const survivor = rows[0];
+    if (survivor.allowance !== allowance) {
+      return await sr.entities.UsageWindow.update(survivor.id, { allowance });
     }
-    survivor = await sr.entities.UsageWindow.update(survivor.id, {
-      used: (survivor.used || 0) + extraUsed,
-      reserved: (survivor.reserved || 0) + extraReserved,
-    });
+    return survivor;
   }
-  if (survivor.window_start !== window.start || survivor.window_end !== window.end) {
-    survivor = await sr.entities.UsageWindow.update(survivor.id, {
-      window_start: window.start,
-      window_end: window.end,
-      allowance,
-      used: 0,
-      reserved: 0,
-    });
-  } else if (survivor.allowance !== allowance) {
-    survivor = await sr.entities.UsageWindow.update(survivor.id, { allowance });
-  }
-  return survivor;
+  return await sr.entities.UsageWindow.create({
+    workspace_id: workspaceId,
+    metric: windowKey,
+    window_start: window.start,
+    window_end: window.end,
+    allowance,
+    used: 0,
+    reserved: 0,
+  });
 }
 
 // Create the windows for a billing state so a first concurrent burst cannot race
@@ -95,7 +74,11 @@ export async function provisionWindows(sr, billing, workspaceId) {
     const window = usageWindowFor(billing, cfg.windowKey);
     if (!window) continue;
     const existing = firstRecord(
-      await sr.entities.UsageWindow.filter({ workspace_id: workspaceId, metric: cfg.windowKey })
+      await sr.entities.UsageWindow.filter({
+        workspace_id: workspaceId,
+        metric: cfg.windowKey,
+        window_start: window.start,
+      })
     );
     const allowance = windowedAllowance(billing, cfg.windowKey);
     if (!existing) {
