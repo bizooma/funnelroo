@@ -33,6 +33,7 @@ import AcceptInvite from '@/pages/AcceptInvite';
 import Unsubscribe from '@/pages/Unsubscribe';
 import Marketing from '@/pages/Marketing';
 import Pricing from '@/pages/Pricing';
+import CheckoutReturn from '@/pages/CheckoutReturn';
 import { LoginRedirect } from '@/components/ProtectedRoute';
 
 function App() {
@@ -57,6 +58,7 @@ function App() {
             {/* Protected routes — require authentication */}
             <Route element={<ProtectedRoute unauthenticatedElement={<LoginRedirect />} />}>
               <Route path="/dev/persona-export" element={<PersonaExportPreview />} />
+              <Route path="/billing/return" element={<CheckoutReturn />} />
               <Route element={<WorkspaceProvider><Outlet /></WorkspaceProvider>}>
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route element={<WorkspaceGuard />}>

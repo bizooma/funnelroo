@@ -5,17 +5,19 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/use-toast";
-import { Loader2, Sparkles, Rocket, AlertTriangle, Check } from "lucide-react";
+import { Loader2, Sparkles, Rocket, AlertTriangle, ExternalLink, CreditCard } from "lucide-react";
 
-// Settings → Billing tab. Shows the workspace's plan, trial, and usage
-// meters. The no-card trial can be started here (owner only). Stripe checkout,
-// portal, upgrade, and cancellation actions are wired in the next phase once
-// Stripe test-mode keys are configured; until then they're clearly labeled.
+// Settings → Billing tab. Shows plan, trial, and usage meters. Owners get real
+// hosted Checkout, Stripe Customer Portal, and cancellation. Fail-closed: if
+// Stripe test keys are not configured, actions surface an honest message rather
+// than a fabricated URL.
 export default function BillingTab() {
-  const { current, canAdmin } = useWorkspace();
+  const { current } = useWorkspace();
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [starting, setStarting] = useState(false);
+  const [busy, setBusy] = useState(null); // "checkout:starter:monthly" | "portal" | "trial"
+  const [interval, setInterval] = useState("monthly");
+  const [configError, setConfigError] = useState(null);
 
   async function load() {
     if (!current) return;
@@ -34,16 +36,60 @@ export default function BillingTab() {
   }
   useEffect(() => { load(); }, [current]);
 
+  function reportError(e, fallback) {
+    const status = e.response?.status;
+    const msg = e.response?.data?.error || e.message;
+    if (status === 503) setConfigError(msg);
+    else toast({ title: fallback, description: msg, variant: "destructive" });
+  }
+
   async function startTrial() {
-    setStarting(true);
+    setBusy("trial");
+    setConfigError(null);
     try {
       await base44.functions.invoke("billingAccess", { action: "startTrial", workspace_id: current.id });
       toast({ title: "Trial started", description: "Your 14-day free trial is active." });
       load();
     } catch (e) {
-      toast({ title: "Trial failed", description: e.response?.data?.error || e.message, variant: "destructive" });
+      reportError(e, "Trial failed");
     } finally {
-      setStarting(false);
+      setBusy(null);
+    }
+  }
+
+  async function checkout(planId) {
+    setBusy(`checkout:${planId}`);
+    setConfigError(null);
+    try {
+      const res = await base44.functions.invoke("stripeCheckout", {
+        workspace_id: current.id,
+        plan: planId,
+        interval,
+        origin: window.location.origin,
+      });
+      if (res.data?.url) window.location.href = res.data.url;
+      else reportError({ message: "Checkout could not be started." }, "Checkout failed");
+    } catch (e) {
+      reportError(e, "Checkout failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function openPortal() {
+    setBusy("portal");
+    setConfigError(null);
+    try {
+      const res = await base44.functions.invoke("stripePortal", {
+        workspace_id: current.id,
+        origin: window.location.origin,
+      });
+      if (res.data?.url) window.location.href = res.data.url;
+      else reportError({ message: "Billing management could not be opened." }, "Portal failed");
+    } catch (e) {
+      reportError(e, "Portal failed");
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -53,9 +99,18 @@ export default function BillingTab() {
   const isOwner = summary.is_owner;
   const meters = summary.usage?.meters || {};
   const resetDate = summary.usage?.reset_date;
+  const customerOnly = summary.status === "read_only" && !summary.plan && !summary.trial;
+  const noPlan = summary.access_state === "none" || customerOnly;
 
   return (
     <div className="space-y-6">
+      {configError && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{configError}</span>
+        </div>
+      )}
+
       {/* Plan header */}
       <Card>
         <CardContent className="p-5">
@@ -65,9 +120,7 @@ export default function BillingTab() {
               <div className="mt-1 text-lg font-semibold text-slate-900">
                 {summary.plan_name || (summary.access_state === "legacy_access" ? "Legacy access" : "No active plan")}
               </div>
-              {summary.interval && (
-                <div className="text-sm text-slate-500 capitalize">{summary.interval} billing</div>
-              )}
+              {summary.interval && <div className="text-sm text-slate-500 capitalize">{summary.interval} billing</div>}
               {summary.status === "trial" && summary.trial && (
                 <div className="mt-1 text-sm text-emerald-700">
                   Trial · {summary.trial.days_remaining} days remaining (ends {fmtDate(summary.trial.ends_at)})
@@ -78,6 +131,11 @@ export default function BillingTab() {
                   Cancellation scheduled — plan available until {fmtDate(summary.paid_through)}
                 </div>
               )}
+              {summary.pending_change && (
+                <div className="mt-1 text-sm text-slate-500">
+                  Scheduled change to {summary.pending_change.target_plan} {summary.pending_change.target_interval}
+                </div>
+              )}
             </div>
             <span className={`text-xs px-2.5 py-1 rounded-full capitalize ${badgeClass(summary.access_state)}`}>
               {labelFor(summary.access_state)}
@@ -86,8 +144,8 @@ export default function BillingTab() {
         </CardContent>
       </Card>
 
-      {/* Trial start / no active plan */}
-      {isOwner && summary.access_state === "none" && (
+      {/* Trial start */}
+      {isOwner && noPlan && (
         <Card>
           <CardContent className="p-5">
             <div className="flex items-start gap-3">
@@ -103,8 +161,8 @@ export default function BillingTab() {
                   <li>1 live funnel · 2 team users · 100 contacts</li>
                   <li>100 email sends · 20 AI text actions · 3 images (totals for 14 days)</li>
                 </ul>
-                <Button className="mt-4" onClick={startTrial} disabled={starting}>
-                  {starting ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Rocket className="w-4 h-4 mr-1.5" />}
+                <Button className="mt-4" onClick={startTrial} disabled={busy === "trial"}>
+                  {busy === "trial" ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Rocket className="w-4 h-4 mr-1.5" />}
                   Start free trial
                 </Button>
               </div>
@@ -128,46 +186,67 @@ export default function BillingTab() {
             <Meter label="AI text actions" m={meters.ai_text_actions} />
             <Meter label="Generated images" m={meters.images} />
           </div>
-          {Object.values(meters).some((m) => m && m.allowance == null) && (
-            <p className="mt-4 text-xs text-slate-400">
-              Allowances appear once a trial or paid plan is active. Manual editing, viewing saved assets, and downloading existing cards don't consume AI allowance.
-            </p>
-          )}
         </CardContent>
       </Card>
 
-      {/* Owner actions (Stripe checkout — next phase) */}
-      {isOwner ? (
+      {/* Owner actions */}
+      {isOwner && (
         <Card>
           <CardContent className="p-5">
             <h3 className="font-semibold text-slate-800 mb-1">Manage your plan</h3>
             <p className="text-sm text-slate-500 mb-4">
-              Choose a plan, update payment method, view invoices, and cancel are available here once Stripe test-mode checkout is configured.
+              Checkout runs on Stripe's hosted page. Update payment method, view invoices, change plan, and cancel in the Stripe billing portal.
             </p>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" asChild>
-                <Link to="/pricing">Compare plans</Link>
+
+            <div className="flex items-center gap-2 mb-4">
+              <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 p-1">
+                <button onClick={() => setInterval("monthly")} className={`px-3 py-1 text-xs font-medium rounded-full ${interval === "monthly" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}>Monthly</button>
+                <button onClick={() => setInterval("annual")} className={`px-3 py-1 text-xs font-medium rounded-full ${interval === "annual" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}>Annual</button>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {["starter", "growth"].map((planId) => {
+                const isCurrent = summary.plan === planId;
+                return (
+                  <div key={planId} className="rounded-lg border border-slate-200 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-slate-800 capitalize">{planId}</span>
+                      {isCurrent && <span className="text-[10px] uppercase bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">Current</span>}
+                    </div>
+                    <Button
+                      className="mt-3 w-full"
+                      variant={isCurrent ? "outline" : "default"}
+                      onClick={() => checkout(planId)}
+                      disabled={busy === `checkout:${planId}`}
+                    >
+                      {busy === `checkout:${planId}` ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : null}
+                      {isCurrent ? "Change billing interval" : summary.plan ? "Switch to plan" : "Choose plan"}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button variant="outline" onClick={openPortal} disabled={busy === "portal" || !summary.status || noPlan}>
+                {busy === "portal" ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <CreditCard className="w-4 h-4 mr-1.5" />}
+                Update payment / manage billing
               </Button>
-              <Button variant="outline" disabled title="Available once Stripe test checkout is configured">
-                Choose / upgrade plan
-              </Button>
-              <Button variant="outline" disabled title="Available once Stripe is configured">
-                Update payment method
-              </Button>
-              <Button variant="outline" disabled title="Available once Stripe is configured">
-                View invoices
-              </Button>
-              <Button variant="outline" disabled title="Available once Stripe is configured">
-                Cancel renewal
+              <Button variant="ghost" asChild>
+                <Link to="/pricing">Compare plans <ExternalLink className="w-3.5 h-3.5 ml-1" /></Link>
               </Button>
             </div>
+
             <div className="mt-4 flex items-start gap-2 text-xs text-slate-400">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              <span>Checkout is being configured in Stripe test mode. No real charges are made and no existing access is restricted during setup.</span>
+              <span>Checkout and billing management use Stripe test mode. No real charges are made, and no existing access is restricted.</span>
             </div>
           </CardContent>
         </Card>
-      ) : (
+      )}
+
+      {!isOwner && (
         <Card>
           <CardContent className="p-5">
             <p className="text-sm text-slate-600">

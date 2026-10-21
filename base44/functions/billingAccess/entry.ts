@@ -139,6 +139,12 @@ export default async function (req) {
         catalog_version: CATALOG_VERSION,
         legacy_access: false,
       });
+      // Provision usage windows up-front so the first burst of metered actions
+      // cannot race window creation.
+      try {
+        const { provisionWindows } = await import("../../shared/usage.ts");
+        await provisionWindows(sr, billing, body.workspace_id);
+      } catch {}
       return ok({ billing });
     }
 

@@ -22,6 +22,9 @@
     "stripe_subscription_item_id": {
       "type": "string"
     },
+    "stripe_status": {
+      "type": "string"
+    },
     "plan": {
       "type": "string",
       "enum": [
@@ -116,6 +119,10 @@
     },
     "legacy_reason": {
       "type": "string"
+    },
+    "enforcement_enabled": {
+      "type": "boolean",
+      "default": false
     },
     "last_sync_at": {
       "type": "string",

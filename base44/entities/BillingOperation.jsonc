@@ -5,6 +5,14 @@
     "workspace_id": {
       "type": "string"
     },
+    "environment": {
+      "type": "string",
+      "enum": [
+        "test",
+        "live"
+      ],
+      "default": "test"
+    },
     "operation_type": {
       "type": "string",
       "enum": [

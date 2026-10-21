@@ -1,0 +1,48 @@
+{
+  "description": "Reconciles FunnelRoo subscriptions and recovers failed Stripe webhook events every 15 minutes",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "*/15 * * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "name": "Billing Reconcile",
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "billing_reconcile",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "reconcile": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "stripeReconcile",
+            "payload": {
+              "_system": true,
+              "_workflow": true
+            }
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Reconcile subscriptions and recover failed events",
+            "description": "Re-fetches every subscription-bearing workspace from Stripe and retries failed BillingEvents so missed webhooks, renewals, expiries, and payment recovery converge."
+          }
+        }
+      }
+    ]
+  }
+}
